@@ -181,6 +181,19 @@ impl UtcDateTime {
         UtcDateTime { date, time }
     }
 
+    /// Converts Unix time (seconds since 1970-01-01 00:00:00 UTC, as delivered by
+    /// operating systems) to a calendar date and time.
+    pub fn from_unix_seconds(seconds: i64) -> UtcDateTime {
+        let per_day = i64::from(SECONDS_PER_DAY);
+        let (year, month, day) = civil_from_days(seconds.div_euclid(per_day));
+        let time = TimeOfDay::from_seconds_since_midnight(seconds.rem_euclid(per_day) as u32)
+            .expect("remainder is always less than one day");
+        UtcDateTime {
+            date: Date { year, month, day },
+            time,
+        }
+    }
+
     /// The date and time `seconds` later, rolling over midnight as needed.
     pub fn plus_seconds(self, seconds: u64) -> UtcDateTime {
         let total = u64::from(self.time.seconds_since_midnight()) + seconds;
@@ -234,6 +247,22 @@ mod tests {
         assert_eq!(time.seconds_since_midnight(), 49_510);
         assert_eq!(TimeOfDay::from_seconds_since_midnight(49_510), Some(time));
         assert_eq!(TimeOfDay::from_seconds_since_midnight(86_400), None);
+    }
+
+    #[test]
+    fn converts_unix_time() {
+        let epoch = UtcDateTime::from_unix_seconds(0);
+        assert_eq!(epoch.date, Date::new(1970, 1, 1).unwrap());
+        assert_eq!(epoch.time, TimeOfDay::MIDNIGHT);
+
+        // 2026-11-10 15:46:40 UTC
+        let later = UtcDateTime::from_unix_seconds(1_794_325_600);
+        assert_eq!(later.date, Date::new(2026, 11, 10).unwrap());
+        assert_eq!(later.time, TimeOfDay::new(15, 46, 40).unwrap());
+
+        let before = UtcDateTime::from_unix_seconds(-1);
+        assert_eq!(before.date, Date::new(1969, 12, 31).unwrap());
+        assert_eq!(before.time, TimeOfDay::new(23, 59, 59).unwrap());
     }
 
     #[test]

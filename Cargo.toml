@@ -11,7 +11,11 @@ publish = false
 flight-core = { path = "crates/flight-core" }
 sensor-sim = { path = "crates/sensor-sim" }
 vario-audio = { path = "crates/vario-audio" }
+sensor-bridge = { path = "crates/sensor-bridge" }
+vario-engine = { path = "crates/vario-engine" }
+serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# "deny" rather than "forbid" so that the one crate exporting C functions can opt out.
+unsafe_code = "deny"

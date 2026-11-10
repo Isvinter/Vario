@@ -1,0 +1,18 @@
+[package]
+name = "vario-engine"
+description = "Runs sensor data through vario filter, tone and logging on a background thread"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+flight-core.workspace = true
+serde.workspace = true
+# Only the lock-free tone control is needed here, not the sound card output.
+vario-audio = { workspace = true, default-features = false }
+
+[dev-dependencies]
+sensor-sim.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,12 @@
+[package]
+name = "sensor-bridge"
+description = "Entry point for sensor data pushed in from native platform code (C ABI)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+flight-core.workspace = true
+
+[lints]
+workspace = true
