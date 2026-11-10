@@ -10,6 +10,13 @@ damit, dass beim ersten Build Fehler zu beheben sind. Auf Linux getestet sind di
 Rust-Crates darunter (`sensor-bridge`, `vario-engine`, Filter, Ton) sowie die App selbst
 mit simuliertem Flug: Oberfläche, Start/Stopp, Tonausgabe und Logdateien.
 
+**Auf dem Mac geprüft (MacBook Air M3, macOS 15.5, 10.11.2026):** Rust 1.99.1 (arm64) mit
+den iOS-Zielen, CocoaPods und `tauri-cli` 2.12.4 sind installiert. `cargo fmt`, `clippy`
+und `test` laufen für den ganzen Workspace sauber durch (93 Tests). Die Desktop-App baut
+auf macOS und besteht den Selbsttest (`VARIO_SMOKE_TEST=1`) mit Ton über CoreAudio.
+**Nicht geprüft:** alles für iOS – dafür fehlt Xcode (siehe unten). Ein
+`cargo check --target aarch64-apple-ios` scheitert ohne Xcode bereits am iOS-SDK.
+
 ## Die Fragen, die der Test beantworten soll
 
 1. Baut und startet die Tauri-App auf dem iPhone?
@@ -20,6 +27,29 @@ mit simuliertem Flug: Oberfläche, Start/Stopp, Tonausgabe und Logdateien.
 6. Stimmt das Vorzeichen der Beschleunigung, und fühlt sich das Vario brauchbar an?
 
 ## 1. Mac vorbereiten
+
+Xcode ist Pflicht: Die Kommandozeilenwerkzeuge allein bringen kein iOS-SDK mit. Bei der
+Installation beachten:
+
+- Platz: Xcode samt iOS-Plattform belegt rund 20 GB, während der Installation mehr.
+  Vorher für mindestens 30–40 GB freien Platz sorgen (`target/` des Projekts kann mit
+  `cargo clean` jederzeit weg, das sind einige GB).
+- Version: Die iOS-Version des iPhones muss vom SDK der Xcode-Version unterstützt sein.
+  macOS 15.5 trägt Xcode 16.4 (bis iOS 18.x). Läuft auf dem iPhone bereits iOS 26,
+  ist Xcode 26 nötig, das wiederum ein neueres macOS verlangt – dann zuerst macOS
+  aktualisieren.
+- Nach der Installation Xcode einmal starten (Lizenz, Zusatzkomponenten, iOS-Plattform
+  herunterladen) und die Kommandozeile darauf umstellen:
+  ```sh
+  sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+  xcrun --sdk iphoneos --show-sdk-path     # muss einen Pfad liefern
+  ```
+
+Hinweis: Die Shell, in der Claude Code auf diesem Mac läuft, läuft unter Rosetta
+(`arch` meldet `i386`). Rust wurde deshalb ausdrücklich als arm64-Toolchain installiert
+(`rustup-init --default-host aarch64-apple-darwin`); `rustup show` muss
+`aarch64-apple-darwin` als Host zeigen. Cargo liegt in `~/.cargo/bin`; damit es in jeder
+Shell gefunden wird, gehört `. "$HOME/.cargo/env"` in die `~/.zshrc`.
 
 ```sh
 # Xcode aus dem App Store installieren und einmal starten (Lizenz, Zusatzkomponenten).

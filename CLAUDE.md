@@ -20,7 +20,7 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 | 0 | Prüfen und planen, `CLAUDE.md` | freigegeben |
 | 1 | Workspace, `flight-core` (Sensor-Traits, IGC), `sensor-sim` | freigegeben |
 | 2 | Vario-Filter, `vario-audio`, CLI auf Linux | freigegeben |
-| 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | App läuft auf Linux (Selbsttest), iOS-Teil ungebaut und ungetestet; Anleitung: `docs/ios-test.md` |
+| 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | Workspace baut und testet auf Linux und macOS (Desktop-Selbsttest auf beiden); iOS-Teil ungebaut, wartet auf Xcode; Anleitung: `docs/ios-test.md` |
 | 3 | App auf Linux (Instrumente, Einstellungen, Karte) | offen |
 | 4 | Aufzeichnung, Flugliste | offen |
 | 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | offen |
@@ -129,7 +129,9 @@ VARIO_SMOKE_TEST=1 cargo run -p vario-app
 Offen aus Phase 2: Einstellungen werden noch nicht dauerhaft gespeichert (kommt mit der
 Einstellungsseite in Phase 3).
 
-Rust ist per `rustup` im Home-Verzeichnis installiert (`~/.cargo/bin`).
+Rust ist per `rustup` im Home-Verzeichnis installiert (`~/.cargo/bin`). Auf dem Mac läuft
+die Shell von Claude Code unter Rosetta; die Toolchain ist trotzdem nativ arm64
+(`aarch64-apple-darwin`). `timeout` gibt es auf macOS nicht.
 
 ## Fachliche Leitplanken
 
