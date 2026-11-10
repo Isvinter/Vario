@@ -8,5 +8,7 @@ pub mod atmosphere;
 pub mod geo;
 pub mod igc;
 pub mod sensor;
+pub mod settings;
 pub mod time;
 pub mod track;
+pub mod vario;
