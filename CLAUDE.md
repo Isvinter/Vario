@@ -18,8 +18,8 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 | Phase | Inhalt | Status |
 |-------|--------|--------|
 | 0 | Prüfen und planen, `CLAUDE.md` | freigegeben |
-| 1 | Workspace, `flight-core` (Sensor-Traits, IGC), `sensor-sim` | fertig, Freigabe offen |
-| 2 | Vario-Filter, `vario-audio`, CLI auf Linux | offen |
+| 1 | Workspace, `flight-core` (Sensor-Traits, IGC), `sensor-sim` | freigegeben |
+| 2 | Vario-Filter, `vario-audio`, CLI auf Linux | fertig, Freigabe offen |
 | 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | offen |
 | 3 | App auf Linux (Instrumente, Einstellungen, Karte) | offen |
 | 4 | Aufzeichnung, Flugliste | offen |
@@ -97,6 +97,17 @@ Technik (mit Phase 0 freigegeben):
 cargo run -p sensor-sim --example replay -- --synthetic demo --speed 10
 cargo run -p sensor-sim --example replay -- testdata/flug.igc --fast --out /tmp/kopie.igc
 ```
+
+```
+# Vario hören: Flug durch Filter und Ton abspielen
+cargo run -p vario-cli -- --synthetic demo
+cargo run -p vario-cli -- testdata/flug.igc --speed 4 --climb-threshold 0.5 --volume 0.4
+# Ton ohne Soundkarte in eine WAV-Datei schreiben
+cargo run -p vario-cli -- --synthetic demo --noise --wav /tmp/demo.wav
+```
+
+Offen aus Phase 2: Einstellungen werden noch nicht dauerhaft gespeichert (kommt mit der
+Einstellungsseite in Phase 3).
 
 Rust ist per `rustup` im Home-Verzeichnis installiert (`~/.cargo/bin`).
 
