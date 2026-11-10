@@ -1,0 +1,19 @@
+[package]
+name = "vario-cli"
+description = "Command line vario: plays a flight through the vario filter and tone"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "vario"
+path = "src/main.rs"
+
+[dependencies]
+flight-core.workspace = true
+sensor-sim.workspace = true
+vario-audio.workspace = true
+clap = { version = "4.6", features = ["derive"] }
+
+[lints]
+workspace = true
