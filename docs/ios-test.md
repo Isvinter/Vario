@@ -4,18 +4,43 @@ Ziel: herausfinden, ob Tauri auf dem iPhone für den Flugcomputer trägt, **bevo
 Oberfläche gebaut wird. Die Test-App spielt den Vario-Ton aus den echten Sensoren, zeigt,
 wie regelmäßig jeder Sensor liefert, und schreibt alles in Logdateien.
 
-**Stand:** Der gesamte iOS-Teil (Swift-Code, Tauri-Konfiguration, diese Anleitung) wurde
-auf Linux geschrieben und ist **weder kompiliert noch auf einem Gerät gelaufen**. Rechne
-damit, dass beim ersten Build Fehler zu beheben sind. Auf Linux getestet sind die
-Rust-Crates darunter (`sensor-bridge`, `vario-engine`, Filter, Ton) sowie die App selbst
-mit simuliertem Flug: Oberfläche, Start/Stopp, Tonausgabe und Logdateien.
+**Stand (10.11.2026):** Die App baut für iOS und läuft im **iOS-Simulator**. Auf einem
+**echten iPhone ist noch nichts gelaufen** – alle Fragen unten sind weiterhin offen.
 
-**Auf dem Mac geprüft (MacBook Air M3, macOS 15.5, 10.11.2026):** Rust 1.99.1 (arm64) mit
-den iOS-Zielen, CocoaPods und `tauri-cli` 2.12.4 sind installiert. `cargo fmt`, `clippy`
-und `test` laufen für den ganzen Workspace sauber durch (93 Tests). Die Desktop-App baut
-auf macOS und besteht den Selbsttest (`VARIO_SMOKE_TEST=1`) mit Ton über CoreAudio.
-**Nicht geprüft:** alles für iOS – dafür fehlt Xcode (siehe unten). Ein
-`cargo check --target aarch64-apple-ios` scheitert ohne Xcode bereits am iOS-SDK.
+**Im Simulator geprüft (MacBook Air M3, macOS 27.2.1, Xcode 27.2, iOS-SDK 27.2,
+Simulator „iPhone 18 Pro Max“):**
+
+- `cargo tauri ios init` und `cargo tauri ios build --debug --target aarch64-sim` laufen
+  ohne Fehler durch; der Swift-Code übersetzt ohne Änderung. Das erzeugte Xcode-Projekt
+  liegt unter `apps/vario-app/src-tauri/gen/apple` im Repository.
+- `Info.ios.plist` wird übernommen: Hintergrund-Modi `audio` und `location` sowie die
+  Berechtigungstexte stehen in der Info.plist der gebauten App.
+- Die App startet, „Start“ funktioniert (Plugin-Aufruf Rust → Swift), die Audio-Session
+  meldet `ok`, die Tonausgabe öffnet mit 48000 Hz und 5,3 ms Puffer.
+- Simulierte GPS-Positionen kommen mit etwa 1 Hz über die C-Funktionen in Rust an und
+  landen in den Logdateien im Dokumente-Ordner.
+- Der Rust-Code übersetzt auch für das Gerät (`cargo check --target aarch64-apple-ios`).
+
+**Im Simulator nicht prüfbar:** Barometer und Beschleunigung (gibt es dort nicht, die App
+zeigt „NEIN“), hörbarer Ton, Stummschalter, Verhalten bei gesperrtem Bildschirm, Akku.
+Der Build für das Gerät samt Signierung ist ebenfalls noch nicht gelaufen.
+
+Außerdem auf dem Mac geprüft: `cargo fmt`, `clippy` und `test` laufen für den ganzen
+Workspace sauber durch (93 Tests); die Desktop-App besteht den Selbsttest
+(`VARIO_SMOKE_TEST=1`) mit Ton über CoreAudio.
+
+### Simulator-Test wiederholen
+
+```sh
+cd apps/vario-app/src-tauri
+cargo tauri ios build --debug --target aarch64-sim --ci
+xcrun simctl boot "iPhone 18 Pro Max"
+xcrun simctl install booted gen/apple/build/arm64-sim/Vario.app
+xcrun simctl privacy booted grant location-always de.vario.prototyp.flugcomputer
+xcrun simctl location booted start --speed=15 47.60,11.00 47.62,11.03
+# Selbsttest: drückt selbst auf Start und beendet die App nach 14 s
+SIMCTL_CHILD_VARIO_SMOKE_TEST=1 xcrun simctl launch booted de.vario.prototyp.flugcomputer
+```
 
 ## Die Fragen, die der Test beantworten soll
 
@@ -101,7 +126,7 @@ iPhone per Kabel anschließen und entsperren.
 
 ```sh
 cd apps/vario-app/src-tauri
-cargo tauri ios init        # erzeugt das Xcode-Projekt unter gen/apple
+cargo tauri ios init        # nur nötig, falls gen/apple fehlt (liegt im Repository)
 cargo tauri ios run         # baut, installiert und startet auf dem Gerät
 ```
 
@@ -109,10 +134,9 @@ cargo tauri ios run         # baut, installiert und startet auf dem Gerät
 Verbindung zum Mac, was für den Test im Freien nötig ist. (`cargo tauri ios dev` lädt
 die Oberfläche dagegen vom Mac und ist nur am Schreibtisch brauchbar.)
 
-Prüfen, ob `Info.ios.plist` übernommen wurde: In `gen/apple/vario-app_iOS/Info.plist`
-müssen `UIBackgroundModes` mit `audio` und `location` sowie die drei
-`NS…UsageDescription`-Texte stehen. Fehlen die Hintergrund-Modi, stürzt die App beim
-Tippen auf „Start“ ab.
+`Info.ios.plist` wird erst beim Bauen eingemischt: Die Hintergrund-Modi und die
+`NS…UsageDescription`-Texte stehen in der Info.plist der gebauten App, nicht in
+`gen/apple/vario-app_iOS/Info.plist` (im Simulator-Build geprüft).
 
 ### Wahrscheinliche Stolperstellen beim ersten Build
 

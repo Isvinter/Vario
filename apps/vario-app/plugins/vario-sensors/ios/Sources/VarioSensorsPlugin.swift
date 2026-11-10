@@ -5,7 +5,8 @@
 // crate. Nothing here goes through the web view, so it keeps working while the screen
 // is locked (given the background modes "audio" and "location" in Info.plist).
 //
-// NOTE: written on Linux and not yet compiled or run on a device.
+// NOTE: compiles and runs in the iOS simulator (GPS only; the simulator has no barometer
+// and no motion sensors). Not yet run on a real device.
 
 import AVFoundation
 import CoreLocation
