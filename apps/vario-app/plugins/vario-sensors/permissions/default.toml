@@ -1,0 +1,3 @@
+[default]
+description = "The plugin has no commands that can be called from the web view."
+permissions = []

@@ -1,0 +1,18 @@
+[package]
+name = "tauri-plugin-vario-sensors"
+description = "Native sensor access for the vario app (iOS: CoreLocation, CoreMotion, audio session)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+# Required by Tauri for plugins that contain native (Swift) code.
+links = "tauri-plugin-vario-sensors"
+
+[dependencies]
+tauri = { version = "2" }
+serde = { workspace = true }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[lints]
+workspace = true

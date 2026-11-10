@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
+members = ["crates/*", "apps/vario-app/src-tauri", "apps/vario-app/plugins/*"]
+# Plain `cargo test` / `cargo clippy` only cover the crates, which build without any
+# system libraries. The app needs the Tauri system packages; include it with --workspace.
+default-members = ["crates/*"]
 
 [workspace.package]
 version = "0.1.0"

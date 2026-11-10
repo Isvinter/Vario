@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged by Tauri into the generated Info.plist of the iOS app. -->
+<plist version="1.0">
+<dict>
+    <!-- Keep running with the screen locked: GPS tracking and vario tone. -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+        <string>location</string>
+    </array>
+
+    <!-- Texts shown in the permission dialogs. -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Die Position wird für Karte, Geschwindigkeit und die Aufzeichnung des Flugs verwendet.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Damit der Flug auch bei gesperrtem Bildschirm aufgezeichnet wird, braucht die App den Standortzugriff „Immer“.</string>
+    <key>NSMotionUsageDescription</key>
+    <string>Luftdruck und Beschleunigung werden für das Variometer verwendet.</string>
+
+    <!-- Make the app's Documents folder (sensor logs, later IGC files) visible in the Files app. -->
+    <key>UIFileSharingEnabled</key>
+    <true/>
+    <key>LSSupportsOpeningDocumentsInPlace</key>
+    <true/>
+</dict>
+</plist>

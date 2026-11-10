@@ -19,8 +19,8 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 |-------|--------|--------|
 | 0 | Prüfen und planen, `CLAUDE.md` | freigegeben |
 | 1 | Workspace, `flight-core` (Sensor-Traits, IGC), `sensor-sim` | freigegeben |
-| 2 | Vario-Filter, `vario-audio`, CLI auf Linux | fertig, Freigabe offen |
-| 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | offen |
+| 2 | Vario-Filter, `vario-audio`, CLI auf Linux | freigegeben |
+| 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | auf Linux vorbereitet, iOS-Teil ungebaut und ungetestet; Anleitung: `docs/ios-test.md` |
 | 3 | App auf Linux (Instrumente, Einstellungen, Karte) | offen |
 | 4 | Aufzeichnung, Flugliste | offen |
 | 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | offen |
@@ -41,9 +41,16 @@ crates/
                          pure and testable, the audio device backend sits behind a feature
   sensor-sim/            sensor source for development: IGC replay (real time or
                          accelerated) and synthetic profiles
-  vario-cli/             small command line program (phase 2)
+  vario-cli/             small command line program
+  sensor-bridge/         C entry point (`vario_push_*`) through which native code pushes
+                         sensor samples into a channel; the only crate allowed `unsafe`
+  vario-engine/          background thread: channel -> filter -> tone, statistics, logs
 apps/
-  vario-app/             UI app, as little logic as possible (phase 3+)
+  vario-app/
+    src-tauri/           Tauri app: glue only (commands, audio thread, desktop simulator)
+    plugins/vario-sensors/  Tauri plugin; `ios/Sources` holds the Swift sensor bridge
+    ui/                  web UI (plain HTML/JS, no bundler)
+docs/ios-test.md         build and test instructions for the iOS test
 testdata/                real IGC files provided by the user
 ```
 
@@ -52,8 +59,10 @@ Regeln:
 - `flight-core` hat keine UI-, OS- oder Audio-Abhängigkeiten und kein `std::time::Instant`/
   Systemuhr in der Logik: Zeit kommt immer als Zeitstempel mit den Sensorwerten herein.
   So laufen Simulator, beschleunigte Wiedergabe und Tests deterministisch.
-- Sensoren werden nur über die Traits aus `flight-core` angesprochen. Simulator, Linux und
-  iOS sind gleichberechtigte Implementierungen.
+- Abfragbare Sensorquellen (Simulator) implementieren die Traits aus `flight-core`.
+  Quellen, die von sich aus liefern (iOS-Callbacks), schieben `SensorEvent`s über
+  `sensor-bridge` in einen Kanal. Die Engine liest immer aus diesem Kanal, auf dem Desktop
+  speist ihn der Simulator. Hinter dem Kanal ist alles plattformgleich.
 - Der Vario-Filter fusioniert Luftdruck und Beschleunigung (Kalman) und muss mit
   unterschiedlichen, unregelmäßigen Abtastraten umgehen (iOS-Barometer nur ca. 1 Hz).
 - Alles Zeitkritische (Filter, Ton, Aufzeichnung) liegt in Rust und darf nicht von der
@@ -79,9 +88,13 @@ Technik (mit Phase 0 freigegeben):
 - Vor jedem Commit müssen sauber durchlaufen:
   ```
   cargo fmt --all -- --check
-  cargo clippy --workspace --all-targets -- -D warnings
-  cargo test --workspace
+  cargo clippy --all-targets -- -D warnings
+  cargo test
   ```
+  Ohne `--workspace` prüfen diese Befehle nur `crates/*` (die `default-members`). Die App
+  unter `apps/` braucht die Tauri-Systempakete (`libwebkit2gtk-4.1-dev` usw.); sind sie
+  installiert, zusätzlich mit `--workspace` prüfen.
+- Exit-Status der Prüfungen nicht durch Pipes (`| tail`) verdecken.
 - Kernlogik hat Tests. Filter-Tests prüfen gegen synthetische Profile mit bekanntem
   Steigwert; IGC-Tests prüfen den Roundtrip (lesen → schreiben → inhaltsgleich).
 - Vor größeren Abhängigkeiten oder Abweichungen von der Architektur den Nutzer fragen.
