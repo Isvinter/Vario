@@ -7,6 +7,7 @@
 mod audio;
 #[cfg(desktop)]
 mod sim;
+mod smoke;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -142,7 +143,17 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_vario_sensors::init())
         .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![start, stop, status, test_tone])
+        .invoke_handler(tauri::generate_handler![
+            start,
+            stop,
+            status,
+            test_tone,
+            smoke::smoke_report
+        ])
+        .setup(|app| {
+            smoke::maybe_run(app.handle());
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running the app");
 }

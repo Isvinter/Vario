@@ -20,7 +20,7 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 | 0 | Prüfen und planen, `CLAUDE.md` | freigegeben |
 | 1 | Workspace, `flight-core` (Sensor-Traits, IGC), `sensor-sim` | freigegeben |
 | 2 | Vario-Filter, `vario-audio`, CLI auf Linux | freigegeben |
-| 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | auf Linux vorbereitet, iOS-Teil ungebaut und ungetestet; Anleitung: `docs/ios-test.md` |
+| 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | App läuft auf Linux (Selbsttest), iOS-Teil ungebaut und ungetestet; Anleitung: `docs/ios-test.md` |
 | 3 | App auf Linux (Instrumente, Einstellungen, Karte) | offen |
 | 4 | Aufzeichnung, Flugliste | offen |
 | 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | offen |
@@ -117,6 +117,13 @@ cargo run -p vario-cli -- --synthetic demo
 cargo run -p vario-cli -- testdata/flug.igc --speed 4 --climb-threshold 0.5 --volume 0.4
 # Ton ohne Soundkarte in eine WAV-Datei schreiben
 cargo run -p vario-cli -- --synthetic demo --noise --wav /tmp/demo.wav
+```
+
+```
+# App auf dem Desktop starten (simulierter Flug)
+cargo run -p vario-app
+# Selbsttest: drückt selbst auf Start, gibt nach 14 s den Seiteninhalt aus und beendet sich
+VARIO_SMOKE_TEST=1 cargo run -p vario-app
 ```
 
 Offen aus Phase 2: Einstellungen werden noch nicht dauerhaft gespeichert (kommt mit der

@@ -6,8 +6,9 @@ wie regelmäßig jeder Sensor liefert, und schreibt alles in Logdateien.
 
 **Stand:** Der gesamte iOS-Teil (Swift-Code, Tauri-Konfiguration, diese Anleitung) wurde
 auf Linux geschrieben und ist **weder kompiliert noch auf einem Gerät gelaufen**. Rechne
-damit, dass beim ersten Build Fehler zu beheben sind. Die Rust-Crates darunter
-(`sensor-bridge`, `vario-engine`, Filter, Ton) sind auf Linux getestet.
+damit, dass beim ersten Build Fehler zu beheben sind. Auf Linux getestet sind die
+Rust-Crates darunter (`sensor-bridge`, `vario-engine`, Filter, Ton) sowie die App selbst
+mit simuliertem Flug: Oberfläche, Start/Stopp, Tonausgabe und Logdateien.
 
 ## Die Fragen, die der Test beantworten soll
 
