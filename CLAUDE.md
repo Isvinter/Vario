@@ -17,9 +17,10 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 
 | Phase | Inhalt | Status |
 |-------|--------|--------|
-| 0 | Prüfen und planen, `CLAUDE.md` | Empfehlung abgegeben, Freigabe offen |
-| 1 | Workspace, `flight-core` (Sensor-Traits, IGC), `sensor-sim` | offen |
+| 0 | Prüfen und planen, `CLAUDE.md` | freigegeben |
+| 1 | Workspace, `flight-core` (Sensor-Traits, IGC), `sensor-sim` | fertig, Freigabe offen |
 | 2 | Vario-Filter, `vario-audio`, CLI auf Linux | offen |
+| 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | offen |
 | 3 | App auf Linux (Instrumente, Einstellungen, Karte) | offen |
 | 4 | Aufzeichnung, Flugliste | offen |
 | 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | offen |
@@ -62,7 +63,7 @@ Regeln:
 - Spätere Features nicht verbauen: Flugbuch, Offline-Karten, Lufträume (openAIP),
   Start-/Landeerkennung, externes Bluetooth-Vario (wäre nur eine weitere Sensorquelle).
 
-Vorgeschlagene Technik (gilt erst nach Freigabe von Phase 0):
+Technik (mit Phase 0 freigegeben):
 
 - UI: Tauri 2 + MapLibre GL JS.
 - Audio: `cpal` (ALSA/PipeWire auf Linux, CoreAudio auf iOS).
@@ -88,6 +89,16 @@ Vorgeschlagene Technik (gilt erst nach Freigabe von Phase 0):
   das Verhalten auf dem echten Gerät, die dort nicht getestet wurden.
 - Fehlen Testdaten: mit synthetischen Profilen arbeiten, bis IGC-Dateien in `testdata/`
   liegen.
+
+## Nützliche Befehle
+
+```
+# Flug durch die simulierten Sensoren abspielen (Profile: demo, climb, thermal, sink)
+cargo run -p sensor-sim --example replay -- --synthetic demo --speed 10
+cargo run -p sensor-sim --example replay -- testdata/flug.igc --fast --out /tmp/kopie.igc
+```
+
+Rust ist per `rustup` im Home-Verzeichnis installiert (`~/.cargo/bin`).
 
 ## Fachliche Leitplanken
 
