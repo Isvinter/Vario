@@ -1,0 +1,13 @@
+[package]
+name = "sensor-sim"
+description = "Simulated sensor sources: IGC replay and synthetic flight profiles"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+flight-core.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
