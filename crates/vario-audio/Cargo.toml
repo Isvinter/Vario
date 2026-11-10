@@ -1,0 +1,20 @@
+[package]
+name = "vario-audio"
+description = "Vario tone synthesis and audio output"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[features]
+default = ["output"]
+# Audio device output through cpal. Without it only the pure synthesizer is built,
+# which needs no system audio libraries.
+output = ["dep:cpal"]
+
+[dependencies]
+flight-core.workspace = true
+thiserror.workspace = true
+cpal = { version = "0.18", optional = true }
+
+[lints]
+workspace = true

@@ -10,6 +10,7 @@ publish = false
 [workspace.dependencies]
 flight-core = { path = "crates/flight-core" }
 sensor-sim = { path = "crates/sensor-sim" }
+vario-audio = { path = "crates/vario-audio" }
 thiserror = "2"
 
 [workspace.lints.rust]
