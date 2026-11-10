@@ -1,0 +1,16 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+flight-core = { path = "crates/flight-core" }
+sensor-sim = { path = "crates/sensor-sim" }
+thiserror = "2"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
