@@ -20,7 +20,7 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 | 0 | Prüfen und planen, `CLAUDE.md` | freigegeben |
 | 1 | Workspace, `flight-core` (Sensor-Traits, IGC), `sensor-sim` | freigegeben |
 | 2 | Vario-Filter, `vario-audio`, CLI auf Linux | freigegeben |
-| 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | Workspace baut und testet auf Linux und macOS (Desktop-Selbsttest auf beiden); iOS-App baut und läuft im iOS-Simulator (Start, Audio-Session, GPS → Rust); Test auf dem echten iPhone steht aus (Signierung, Gerät); Anleitung: `docs/ios-test.md` |
+| 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | Workspace baut und testet auf Linux und macOS (Desktop-Selbsttest auf beiden); auf dem iPhone 13 Pro Max bestanden: Ton und Sensoren (50 Hz / 1 Hz) laufen gesperrt und im Hintergrund lückenlos, Tauri bleibt; offen nur der Test draußen (GPS, Akku, Anruf); Ergebnisse: `docs/ios-test.md`; wartet auf Freigabe |
 | 3 | App auf Linux (Instrumente, Einstellungen, Karte) | offen |
 | 4 | Aufzeichnung, Flugliste | offen |
 | 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | offen |
@@ -100,6 +100,9 @@ Technik (mit Phase 0 freigegeben):
 - Vor größeren Abhängigkeiten oder Abweichungen von der Architektur den Nutzer fragen.
 - Klar benennen, was nur auf Linux bzw. nur im Simulator geprüft wurde. Keine Aussagen über
   das Verhalten auf dem echten Gerät, die dort nicht getestet wurden.
+- Das Repository auf GitHub (`origin`) ist öffentlich: keine Wohnort-Koordinaten (GPS-Zeilen
+  aus Sensorlogs von zu Hause entfernen), keine Zugangsdaten committen. Nur nach
+  Rückfrage pushen.
 - Fehlen Testdaten: mit synthetischen Profilen arbeiten, bis IGC-Dateien in `testdata/`
   liegen.
 

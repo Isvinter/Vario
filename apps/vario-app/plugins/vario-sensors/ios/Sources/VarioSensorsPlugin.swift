@@ -5,8 +5,8 @@
 // crate. Nothing here goes through the web view, so it keeps working while the screen
 // is locked (given the background modes "audio" and "location" in Info.plist).
 //
-// NOTE: compiles and runs in the iOS simulator (GPS only; the simulator has no barometer
-// and no motion sensors). Not yet run on a real device.
+// NOTE: tested on an iPhone 13 Pro Max (iOS 27.2) indoors: motion and barometer deliver
+// without gaps with the screen locked. GPS outdoors is not yet tested.
 
 import AVFoundation
 import CoreLocation
@@ -180,8 +180,8 @@ final class SensorBridge: NSObject, CLLocationManagerDelegate {
       // userAcceleration = -(true acceleration), and with "up" = -gravity the upward
       // acceleration is the plain dot product of the two vectors.
       //
-      // TO VERIFY ON THE DEVICE: lifting the phone quickly must show a positive
-      // climb rate first. If it dips first, this sign is wrong.
+      // Verified on the device: lifting the phone quickly shows a positive climb
+      // rate first.
       let user = motion.userAcceleration
       let gravity = motion.gravity
       let upG = user.x * gravity.x + user.y * gravity.y + user.z * gravity.z

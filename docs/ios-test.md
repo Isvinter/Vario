@@ -4,8 +4,35 @@ Ziel: herausfinden, ob Tauri auf dem iPhone für den Flugcomputer trägt, **bevo
 Oberfläche gebaut wird. Die Test-App spielt den Vario-Ton aus den echten Sensoren, zeigt,
 wie regelmäßig jeder Sensor liefert, und schreibt alles in Logdateien.
 
-**Stand (10.11.2026):** Die App baut für iOS und läuft im **iOS-Simulator**. Auf einem
-**echten iPhone ist noch nichts gelaufen** – alle Fragen unten sind weiterhin offen.
+**Stand (11.11.2026):** Die App läuft auf dem **iPhone 13 Pro Max (iOS 27.2)**. Die Teile
+A und B des Testablaufs sind bestanden; Teil C (draußen, GPS, Akku, Anruf) steht aus.
+
+**Auf dem iPhone geprüft (im Gebäude, am Kabel):**
+
+- Build, Signierung und Installation mit kostenloser Apple-ID („Personal Team“)
+  funktionieren, auch mit den Hintergrund-Modi `audio` und `location`.
+- Teil A: Start, Berechtigungen, Testtöne, Ton trotz Stummschalter und das Vorzeichen der
+  Beschleunigung (Anheben schlägt zuerst positiv aus) stimmen laut Nutzer.
+- Teil B, je etwa 10 Minuten, ausgewertet aus den Rohdaten in `testdata/ios/`
+  (`sensors-20261111-111622.csv`, 26 Minuten am Stück; die GPS-Zeilen sind entfernt,
+  weil das Repository öffentlich ist):
+
+  | Abschnitt | Beschleunigung | Luftdruck |
+  |---|---|---|
+  | gesperrt, mit Testton | 49,7 Hz, längste Pause 0,020 s | 0,94 Hz, längste Pause 1,07 s |
+  | gesperrt, ohne Ton | 49,7 Hz, längste Pause 0,035 s | 0,94 Hz, längste Pause 1,07 s |
+  | andere App im Vordergrund | 49,7 Hz, längste Pause 0,020 s | 0,94 Hz, längste Pause 1,07 s |
+
+  Keine einzige Lücke; der Testton lief laut Nutzer gesperrt durch. Der Steigwert steht
+  in Ruhe bei etwa ±0,1 m/s.
+
+**Auf dem iPhone noch offen:** GPS kam im Gebäude nur vereinzelt (8 Positionen in 26
+Minuten) – ob es draußen gesperrt mit 1 Hz liefert, zeigt erst Teil C. Ebenso offen:
+Akkuverbrauch, Verhalten nach einem Anruf, Vario-Gefühl bei echtem Höhenunterschied.
+Der Test lief am Kabel; ohne Kabel ist er nicht wiederholt worden.
+
+**Bewertung:** Tauri trägt für den Hintergrundbetrieb, die Oberfläche kann wie geplant
+mit Tauri gebaut werden.
 
 **Im Simulator geprüft (MacBook Air M3, macOS 27.2.1, Xcode 27.2, iOS-SDK 27.2,
 Simulator „iPhone 18 Pro Max“):**
@@ -91,15 +118,7 @@ brew install cocoapods
 cargo install tauri-cli --version "^2" --locked
 ```
 
-Das Projekt muss auf den Mac. Es gibt noch kein Git-Remote; am einfachsten ist ein
-privates Repository (GitHub o. ä.) oder ein Bundle:
-
-```sh
-# auf Linux
-git bundle create vario.bundle --all
-# auf dem Mac
-git clone vario.bundle Vario
-```
+Das Projekt liegt auf GitHub (`origin`) und wird von dort auf den Mac geklont.
 
 ## 2. Signierung
 
@@ -115,10 +134,24 @@ git clone vario.bundle Vario
   einschalten. Nach der ersten Installation dem Entwicklerzertifikat vertrauen
   (*Allgemein → VPN & Geräteverwaltung*).
 
-**Ungeklärt:** Die Tauri-Dokumentation nennt das kostenpflichtige Apple Developer
-Program als Voraussetzung. Ob eine kostenlose Apple-ID („Personal Team“) hier reicht
-und ob damit die Hintergrund-Modi funktionieren, ist nicht geprüft. Mit kostenloser
-Apple-ID läuft eine installierte App nach meinem Kenntnisstand nach 7 Tagen ab.
+Eine kostenlose Apple-ID („Personal Team“) reicht, auch für die Hintergrund-Modi
+(geprüft). Die installierte App läuft damit nach meinem Kenntnisstand nach 7 Tagen ab
+und muss dann neu installiert werden (nicht geprüft).
+
+Was beim ersten Mal zusätzlich nötig war:
+
+- In Xcode unter *Settings → Accounts → Manage Certificates…* ein Zertifikat
+  „Apple Development“ anlegen. Die Team-ID steht danach im Zertifikat (Feld OU).
+- Das iPhone muss beim Team registriert sein, sonst stellt Apple kein Profil aus
+  („Your team has no devices“). `cargo tauri ios build` registriert es nicht selbst;
+  einmalig erledigt das dieser Aufruf (er scheitert danach am Tauri-Build-Skript, das
+  ist dann egal – das Profil existiert):
+  ```sh
+  cd apps/vario-app/src-tauri/gen/apple
+  xcodebuild -project vario-app.xcodeproj -scheme vario-app_iOS -configuration debug \
+    -destination 'id=<UDID aus: xcrun devicectl list devices>' \
+    -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
+  ```
 
 ## 3. Bauen und installieren
 
@@ -128,6 +161,13 @@ iPhone per Kabel anschließen und entsperren.
 cd apps/vario-app/src-tauri
 cargo tauri ios init        # nur nötig, falls gen/apple fehlt (liegt im Repository)
 cargo tauri ios run         # baut, installiert und startet auf dem Gerät
+```
+
+Geprüft ist dieser Weg (statt `ios run`):
+
+```sh
+cargo tauri ios build --debug --target aarch64 --ci
+xcrun devicectl device install app --device <UDID> gen/apple/build/arm64/Vario.ipa
 ```
 
 `ios run` bettet die Oberfläche in die App ein. Die App läuft danach auch ohne
@@ -196,7 +236,16 @@ Die App schreibt in ihren Dokumente-Ordner, sichtbar in der App **Dateien** unte
 - `summary-<Zeit>.txt`: eine Zeile alle 10 Sekunden mit Raten und längster Pause.
 - `sensors-<Zeit>.csv`: jeder einzelne Sensorwert (etwa 5 MB pro Stunde).
 
-Per AirDrop auf den Mac schicken und in `testdata/ios/` im Projekt ablegen. Die
+Per AirDrop auf den Mac schicken und in `testdata/ios/` im Projekt ablegen. **Vor einem
+Commit die GPS-Zeilen entfernen** (`grep -v "^g," …`), wenn die Aufnahme zu Hause
+entstand – das Repository ist öffentlich. Am Kabel geht es direkt:
+
+```sh
+xcrun devicectl device copy from --device <UDID> --domain-type appDataContainer \
+  --domain-identifier de.vario.prototyp.flugcomputer \
+  --source Documents/logs --destination testdata/ios
+```
+ Die
 Rohdaten sind die Grundlage, um den Vario-Filter auf echte Sensoren abzustimmen.
 
 ## 6. Bewertung
