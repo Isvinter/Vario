@@ -22,7 +22,7 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 | 2 | Vario-Filter, `vario-audio`, CLI auf Linux | freigegeben |
 | 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | Workspace baut und testet auf Linux und macOS (Desktop-Selbsttest auf beiden); auf dem iPhone 13 Pro Max bestanden: Ton und Sensoren (50 Hz / 1 Hz) laufen gesperrt und im Hintergrund lückenlos, Tauri bleibt; offen nur der Test draußen (GPS, Akku, Anruf); Ergebnisse: `docs/ios-test.md`; wartet auf Freigabe |
 | 3 | App auf Linux (Instrumente, Einstellungen, Karte) | freigegeben (geprüft auf macOS und im iOS-Simulator; auf Linux seit Phase 2b nicht mehr geprüft) |
-| 4 | Aufzeichnung, Flugliste | offen |
+| 4 | Aufzeichnung, Flugliste | umgesetzt, wartet auf Freigabe; geprüft auf macOS (Desktop-Selbsttest) und im iOS-Simulator, nicht auf dem iPhone und nicht auf Linux |
 | 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | offen |
 
 Den Status hier nach jeder Freigabe aktualisieren.
@@ -36,7 +36,8 @@ muss austauschbar bleiben, ohne dass sich die Kern-Crates ändern.
 Cargo.toml               workspace root
 crates/
   flight-core/           platform independent: sensor traits (GPS, pressure, acceleration),
-                         vario filter, track recording, IGC read/write, settings
+                         vario filter, track recording, IGC read/write, flight summary,
+                         settings
   vario-audio/           tone synthesis (climb rate -> pitch/cadence); the synth itself is
                          pure and testable, the audio device backend sits behind a feature
   sensor-sim/            sensor source for development: IGC replay (real time or
@@ -44,7 +45,8 @@ crates/
   vario-cli/             small command line program
   sensor-bridge/         C entry point (`vario_push_*`) through which native code pushes
                          sensor samples into a channel; the only crate allowed `unsafe`
-  vario-engine/          background thread: channel -> filter -> tone, statistics, logs
+  vario-engine/          background thread: channel -> filter -> tone, statistics, logs,
+                         flight recording; also lists/loads/deletes recorded flights
 apps/
   vario-app/
     src-tauri/           Tauri app: glue only (commands, audio thread, desktop simulator)
@@ -130,6 +132,11 @@ cargo run -p vario-app
 # Track-Punkte und Skriptfehler aus und beendet sich
 VARIO_SMOKE_TEST=1 cargo run -p vario-app
 ```
+
+Flüge liegen als IGC-Dateien im Ordner `flights` (iOS: Dokumente-Ordner der App, in der
+App „Dateien“ sichtbar; Desktop: Datenordner der App), Sensorlogs daneben in `logs`. Jeder
+Lauf von Start bis Stopp ist ein Flug; die Datei wird alle 10 s vollständig neu geschrieben.
+Der Selbsttest schreibt seine Flüge in einen temporären Ordner.
 
 Einstellungen liegen als Textdatei (`settings.txt`, Kartenstil in `map-style.txt`) im
 Konfigurationsordner der App; das Format definiert `flight-core`.

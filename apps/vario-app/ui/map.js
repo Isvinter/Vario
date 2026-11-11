@@ -15,6 +15,7 @@ const FlightMap = (() => {
     layers: [{ id: "background", type: "background", paint: { "background-color": "#e8e8e8" } }],
   };
   const TRACK_SOURCE = "track";
+  const SAVED_SOURCE = "saved-flight";
 
   let map = null;
   let marker = null;
@@ -22,6 +23,7 @@ const FlightMap = (() => {
   let usingFallback = false;
   let follow = true;
   let coordinates = []; // [longitude, latitude] pairs of the track
+  let savedCoordinates = []; // the same for a recorded flight being viewed
   let position = null; // { longitude, latitude, course }
   let onFollowChange = () => {};
   let onMessage = () => {};
@@ -41,35 +43,50 @@ const FlightMap = (() => {
   // style change.
   function addTrackLayers() {
     if (map.getSource(TRACK_SOURCE)) return;
-    map.addSource(TRACK_SOURCE, { type: "geojson", data: trackData() });
+    // The recorded flight being viewed goes below the live track.
+    addLine(SAVED_SOURCE, savedCoordinates, "#1a4fd6");
+    addLine(TRACK_SOURCE, coordinates, "#c2185b");
+  }
+
+  function addLine(source, points, color) {
+    map.addSource(source, { type: "geojson", data: lineData(points) });
     // White casing under a dark line: visible on light and dark map areas.
     map.addLayer({
-      id: "track-casing",
+      id: source + "-casing",
       type: "line",
-      source: TRACK_SOURCE,
+      source,
       layout: { "line-join": "round", "line-cap": "round" },
       paint: { "line-color": "#fff", "line-width": 7 },
     });
     map.addLayer({
-      id: "track-line",
+      id: source + "-line",
       type: "line",
-      source: TRACK_SOURCE,
+      source,
       layout: { "line-join": "round", "line-cap": "round" },
-      paint: { "line-color": "#c2185b", "line-width": 4 },
+      paint: { "line-color": color, "line-width": 4 },
     });
   }
 
-  function trackData() {
+  function lineData(points) {
     return {
       type: "Feature",
       properties: {},
-      geometry: { type: "LineString", coordinates },
+      geometry: { type: "LineString", coordinates: points },
     };
   }
 
-  function refreshTrack() {
-    const source = map && map.getSource(TRACK_SOURCE);
-    if (source) source.setData(trackData());
+  function refresh(source, points) {
+    const mapSource = map && map.getSource(source);
+    if (mapSource) mapSource.setData(lineData(points));
+  }
+
+  const refreshTrack = () => refresh(TRACK_SOURCE, coordinates);
+
+  function fitSavedFlight() {
+    if (!map || savedCoordinates.length === 0) return;
+    const bounds = new maplibregl.LngLatBounds(savedCoordinates[0], savedCoordinates[0]);
+    for (const point of savedCoordinates) bounds.extend(point);
+    map.fitBounds(bounds, { padding: 70, maxZoom: 15, duration: 0 });
   }
 
   function setFollow(value) {
@@ -95,6 +112,8 @@ const FlightMap = (() => {
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
     map.on("style.load", addTrackLayers);
+    // A flight chosen before the map existed: show it once the map has its size.
+    map.once("load", fitSavedFlight);
     // Moving the map by hand stops following; the "Folgen" button turns it back on.
     map.on("dragstart", () => setFollow(false));
     map.on("error", (event) => {
@@ -139,7 +158,8 @@ const FlightMap = (() => {
         create();
       } else {
         map.resize();
-        if (follow && position) map.jumpTo({ center: [position.longitude, position.latitude] });
+        if (savedCoordinates.length > 0 && !follow) fitSavedFlight();
+        else if (follow && position) map.jumpTo({ center: [position.longitude, position.latitude] });
       }
     },
 
@@ -148,7 +168,7 @@ const FlightMap = (() => {
       const first = position === null;
       position = { latitude, longitude, course };
       if (!map) return;
-      if (first) map.jumpTo({ center: [longitude, latitude], zoom: 14 });
+      if (first && follow) map.jumpTo({ center: [longitude, latitude], zoom: 14 });
       showPosition();
     },
 
@@ -161,6 +181,20 @@ const FlightMap = (() => {
     clearTrack() {
       coordinates = [];
       refreshTrack();
+    },
+
+    /** Shows a recorded flight (points as from Rust) and zooms to it. */
+    showSavedFlight(points) {
+      savedCoordinates = points.map((point) => [point.longitudeDeg, point.latitudeDeg]);
+      refresh(SAVED_SOURCE, savedCoordinates);
+      // Otherwise the map would jump straight back to the own position.
+      setFollow(false);
+      fitSavedFlight();
+    },
+
+    hideSavedFlight() {
+      savedCoordinates = [];
+      refresh(SAVED_SOURCE, savedCoordinates);
     },
 
     trackLength: () => coordinates.length,

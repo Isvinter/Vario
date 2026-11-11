@@ -28,6 +28,7 @@
       </div>
 
       <button id="toggle" class="button primary">Start</button>
+      <div id="recording"></div>
       <div id="info"></div>
     </section>
 
@@ -39,7 +40,22 @@
         <small>m</small>
       </div>
       <button id="follow" class="map-overlay on">Folgen</button>
+      <div id="saved-flight" class="map-overlay">
+        <span id="saved-flight-label"></span>
+        <button id="close-saved-flight" class="button">Schließen</button>
+      </div>
       <div id="map-message" class="map-overlay"></div>
+    </section>
+
+    <!-- Recorded flights -->
+    <section id="page-flights" class="page">
+      <h2>Flüge</h2>
+      <div id="flights-message" class="hint"></div>
+      <div id="flights"></div>
+      <small class="hint">
+        Jeder Lauf von Start bis Stopp wird als IGC-Datei gespeichert, sobald GPS-Positionen
+        ankommen. Die Dateien sind nicht signiert und damit nicht für Wettbewerbe gültig.
+      </small>
     </section>
 
     <!-- Settings -->
@@ -83,10 +99,7 @@
       <div class="row">
         <button id="save-map-style" class="button">Kartenstil übernehmen</button>
       </div>
-    </section>
 
-    <!-- Sensor diagnostics -->
-    <section id="page-sensors" class="page">
       <h2>Sensoren</h2>
       <table>
         <thead>
@@ -107,8 +120,8 @@
     <nav id="tabs">
       <button data-page="instruments" class="active">Instrumente</button>
       <button data-page="map">Karte</button>
+      <button data-page="flights">Flüge</button>
       <button data-page="settings">Einstellungen</button>
-      <button data-page="sensors">Sensoren</button>
     </nav>
 
     <script src="vendor/maplibre-gl/maplibre-gl.js"></script>

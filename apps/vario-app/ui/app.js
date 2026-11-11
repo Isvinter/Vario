@@ -45,6 +45,7 @@ function showPage(name) {
     tab.classList.toggle("active", tab.dataset.page === name);
   }
   if (name === "map") FlightMap.show();
+  if (name === "flights") loadFlights();
 }
 
 for (const tab of document.querySelectorAll("#tabs button")) {
@@ -88,7 +89,33 @@ function render(status) {
   $("map-altitude").textContent = number(status?.altitudeM);
   if (fix) FlightMap.setPosition(fix.latitudeDeg, fix.longitudeDeg, fix.courseDeg ?? null);
 
-  if (activePage === "sensors") renderSensors(status);
+  renderRecording(status?.recording ?? null);
+  if (activePage === "settings") renderSensors(status);
+}
+
+let recordingFile = null;
+
+function renderRecording(recording) {
+  const element = $("recording");
+  recordingFile = running ? (recording?.fileName ?? null) : null;
+  element.className = recording?.error ? "bad" : "";
+  if (!running || !recording) {
+    element.textContent = "";
+  } else if (recording.error) {
+    element.textContent = "Aufzeichnung: Speichern fehlgeschlagen – " + recording.error;
+  } else if (recording.fixCount === 0) {
+    element.textContent = "Aufzeichnung: warte auf GPS";
+  } else {
+    element.textContent = `● Aufzeichnung: ${duration(recording.fixCount)}`;
+  }
+}
+
+// Seconds as "1:05 h" or "12:07 min".
+function duration(seconds) {
+  const two = (n) => String(n).padStart(2, "0");
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return h > 0 ? `${h}:${two(m)} h` : `${m}:${two(seconds % 60)} min`;
 }
 
 function renderSensors(status) {
@@ -137,6 +164,7 @@ async function toggle() {
       await invoke("stop");
       setRunning(false);
       $("info").textContent = "gestoppt";
+      if (activePage === "flights") loadFlights();
     } else {
       const info = await invoke("start");
       FlightMap.clearTrack();
@@ -154,6 +182,112 @@ async function toggle() {
 }
 
 $("toggle").addEventListener("click", toggle);
+
+// ---- Recorded flights ----
+
+const dateFormat = new Intl.DateTimeFormat("de-DE", {
+  weekday: "short",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function flightTitle(flight) {
+  const start = flight.summary?.startUtc;
+  // The browser converts the UTC time to local time.
+  return start ? dateFormat.format(new Date(start)) : flight.fileName;
+}
+
+async function loadFlights() {
+  let flights;
+  try {
+    flights = await invoke("list_flights");
+  } catch (error) {
+    $("flights-message").textContent = "Fehler: " + error;
+    return;
+  }
+  $("flights-message").textContent = flights.length === 0 ? "Noch keine Flüge aufgezeichnet." : "";
+  const list = $("flights");
+  list.replaceChildren();
+  for (const flight of flights) list.append(flightElement(flight));
+}
+
+// Built with DOM calls instead of innerHTML: file names are not ours to trust.
+function flightElement(flight) {
+  const element = document.createElement("div");
+  element.className = "flight";
+
+  const title = document.createElement("div");
+  title.className = "flight-title";
+  title.textContent = flightTitle(flight);
+
+  const facts = document.createElement("div");
+  facts.className = "flight-facts";
+  const s = flight.summary;
+  const active = flight.fileName === recordingFile;
+  facts.textContent = s
+    ? `${active ? "läuft · " : ""}${duration(s.durationS)} · max. ${s.maxAltitudeM} m · ` +
+      `${(s.trackLengthM / 1000).toFixed(1)} km`
+    : "Datei nicht lesbar";
+
+  const buttons = document.createElement("div");
+  buttons.className = "row";
+
+  const show = document.createElement("button");
+  show.className = "button";
+  show.textContent = "Auf Karte";
+  show.disabled = !s;
+  show.addEventListener("click", () => showFlightOnMap(flight));
+
+  // Deleting cannot be undone, so it takes two taps.
+  const remove = document.createElement("button");
+  remove.className = "button";
+  remove.textContent = "Löschen";
+  remove.disabled = active;
+  let armed = false;
+  remove.addEventListener("click", async () => {
+    if (!armed) {
+      armed = true;
+      remove.textContent = "Wirklich löschen?";
+      remove.classList.add("on");
+      setTimeout(() => {
+        armed = false;
+        remove.textContent = "Löschen";
+        remove.classList.remove("on");
+      }, 3000);
+      return;
+    }
+    try {
+      await invoke("delete_flight", { fileName: flight.fileName });
+    } catch (error) {
+      $("flights-message").textContent = "Löschen fehlgeschlagen: " + error;
+    }
+    loadFlights();
+  });
+
+  buttons.append(show, remove);
+  element.append(title, facts, buttons);
+  return element;
+}
+
+async function showFlightOnMap(flight) {
+  try {
+    const points = await invoke("flight_track", { fileName: flight.fileName });
+    FlightMap.showSavedFlight(points);
+    $("saved-flight-label").textContent = flightTitle(flight);
+    $("saved-flight").style.display = "flex";
+    showPage("map");
+  } catch (error) {
+    $("flights-message").textContent = "Fehler: " + error;
+  }
+}
+
+$("close-saved-flight").addEventListener("click", () => {
+  FlightMap.hideSavedFlight();
+  $("saved-flight").style.display = "none";
+});
 
 // ---- Settings ----
 

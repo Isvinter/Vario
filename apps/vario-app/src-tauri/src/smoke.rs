@@ -1,8 +1,8 @@
 //! Desktop smoke test, for checking the app without a person clicking.
 //!
 //! Run with `VARIO_SMOKE_TEST=1 cargo run -p vario-app`: the app presses its own Start
-//! button, lets the simulated flight run for a while, opens the map, prints what the
-//! pages show (plus the number of track points and any script errors) and exits. Because it goes through the real button and the real page, it also catches
+//! button, lets the simulated flight run for a while, opens the map, the flight list and
+//! the recorded flight, prints what the pages show (plus the number of track points and any script errors) and exits. Because it goes through the real button and the real page, it also catches
 //! errors in the JavaScript and in the connection between page and Rust.
 
 use std::time::Duration;
@@ -13,7 +13,7 @@ const ENV_VAR: &str = "VARIO_SMOKE_TEST";
 /// Long enough for one 10-second summary line to appear.
 const RUN_TIME: Duration = Duration::from_secs(14);
 
-fn enabled() -> bool {
+pub fn enabled() -> bool {
     std::env::var_os(ENV_VAR).is_some()
 }
 
@@ -43,6 +43,11 @@ pub fn maybe_run(app: &AppHandle) {
         // Visit the map so that errors in creating it are caught as well.
         let _ = window.eval("document.querySelector('[data-page=map]').click()");
         std::thread::sleep(RUN_TIME / 2);
+        // The flight list, then the first flight on the map.
+        let _ = window.eval("document.querySelector('[data-page=flights]').click()");
+        std::thread::sleep(Duration::from_secs(1));
+        let _ = window.eval("document.querySelector('.flight .button')?.click()");
+        std::thread::sleep(Duration::from_secs(1));
         let _ = window.eval(
             "window.__TAURI__.core.invoke('smoke_report', { text: \
              [...document.querySelectorAll('.page')].map((page) => page.innerText).join('\\n') + \

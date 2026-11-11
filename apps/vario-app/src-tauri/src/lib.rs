@@ -231,6 +231,10 @@ fn log_dir(app: &AppHandle) -> Option<PathBuf> {
 
 /// Where the recorded flights (IGC files) go.
 fn flights_dir(app: &AppHandle) -> Option<PathBuf> {
+    if smoke::enabled() {
+        // Keep the test's flights out of the real flight list.
+        return Some(std::env::temp_dir().join("vario-smoke-test-flights"));
+    }
     data_dir(app).map(|dir| dir.join("flights"))
 }
 
