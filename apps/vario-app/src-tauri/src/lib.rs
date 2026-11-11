@@ -127,6 +127,22 @@ fn get_settings(state: State<'_, AppState>) -> SettingsDto {
     (*state.settings()).into()
 }
 
+#[tauri::command]
+fn default_settings() -> SettingsDto {
+    VarioSettings::default().into()
+}
+
+#[tauri::command]
+fn get_map_style(app: AppHandle) -> String {
+    settings::load_map_style(&app)
+}
+
+/// Saves the map style URL and returns it as stored (empty input gives the default).
+#[tauri::command]
+fn set_map_style(app: AppHandle, url: String) -> Result<String, String> {
+    settings::save_map_style(&app, &url)
+}
+
 /// Checks, applies and saves new settings. A running vario uses them immediately.
 #[tauri::command]
 fn set_settings(
@@ -194,6 +210,9 @@ pub fn run() {
             test_tone,
             get_settings,
             set_settings,
+            default_settings,
+            get_map_style,
+            set_map_style,
             smoke::smoke_report
         ])
         .setup(|app| {

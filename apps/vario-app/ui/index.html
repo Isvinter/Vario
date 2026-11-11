@@ -2,280 +2,117 @@
 <html lang="de">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
     <title>Vario</title>
-    <style>
-      :root {
-        color-scheme: light;
-        --ink: #000;
-        --paper: #fff;
-        --muted: #555;
-        --line: #bbb;
-        --climb: #0a7a2f;
-        --sink: #b3261e;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 16px);
-        font: 16px/1.4 system-ui, -apple-system, sans-serif;
-        color: var(--ink);
-        background: var(--paper);
-        -webkit-user-select: none;
-        user-select: none;
-      }
-      .climb {
-        font-size: 84px;
-        font-weight: 700;
-        line-height: 1;
-        text-align: center;
-        font-variant-numeric: tabular-nums;
-        margin: 8px 0 0;
-      }
-      .climb.up {
-        color: var(--climb);
-      }
-      .climb.down {
-        color: var(--sink);
-      }
-      .unit {
-        text-align: center;
-        color: var(--muted);
-        margin-bottom: 12px;
-      }
-      .grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
-        gap: 8px;
-        text-align: center;
-      }
-      .grid div {
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 8px 4px;
-      }
-      .grid b {
-        display: block;
-        font-size: 26px;
-        font-variant-numeric: tabular-nums;
-      }
-      .grid span {
-        color: var(--muted);
-        font-size: 13px;
-      }
-      .buttons {
-        display: flex;
-        gap: 8px;
-        margin: 16px 0;
-        flex-wrap: wrap;
-      }
-      button {
-        flex: 1;
-        min-width: 30%;
-        min-height: 52px;
-        font: inherit;
-        font-weight: 600;
-        color: var(--ink);
-        background: var(--paper);
-        border: 2px solid var(--ink);
-        border-radius: 10px;
-      }
-      button.primary {
-        color: var(--paper);
-        background: var(--ink);
-      }
-      button:disabled {
-        opacity: 0.35;
-      }
-      h2 {
-        font-size: 15px;
-        margin: 18px 0 6px;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        font-variant-numeric: tabular-nums;
-      }
-      th,
-      td {
-        text-align: right;
-        padding: 4px 6px;
-        border-bottom: 1px solid var(--line);
-        font-size: 14px;
-      }
-      th:first-child,
-      td:first-child {
-        text-align: left;
-      }
-      td.bad {
-        color: var(--sink);
-        font-weight: 700;
-      }
-      #info,
-      #log {
-        font: 12px/1.45 ui-monospace, Menlo, monospace;
-        white-space: pre-wrap;
-        word-break: break-word;
-        color: var(--muted);
-        -webkit-user-select: text;
-        user-select: text;
-      }
-      #log {
-        max-height: 45vh;
-        overflow-y: auto;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 8px;
-        white-space: pre;
-        overflow-x: auto;
-      }
-    </style>
+    <link rel="stylesheet" href="vendor/maplibre-gl/maplibre-gl.css" />
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div id="climb" class="climb">–</div>
-    <div class="unit">m/s</div>
+    <!-- Instruments -->
+    <section id="page-instruments" class="page active">
+      <div class="vario">
+        <div class="bar"><div id="bar-fill"></div></div>
+        <div class="vario-number">
+          <div id="climb">–</div>
+          <div class="unit">m/s</div>
+        </div>
+      </div>
 
-    <div class="grid">
-      <div><b id="altitude">–</b><span>Höhe m (Druck)</span></div>
-      <div><b id="speed">–</b><span>km/h</span></div>
-      <div><b id="course">–</b><span>Kurs °</span></div>
-    </div>
+      <div class="tiles">
+        <div><b id="altitude">–</b><span>Höhe m</span></div>
+        <div><b id="speed">–</b><span>km/h</span></div>
+        <div><b id="course">–</b><span id="course-label">Kurs</span></div>
+      </div>
 
-    <div class="buttons">
-      <button id="toggle" class="primary">Start</button>
-      <button id="tone-climb" disabled>Testton Steigen</button>
-      <button id="tone-sink" disabled>Testton Sinken</button>
-    </div>
+      <button id="toggle" class="button primary">Start</button>
+      <div id="info"></div>
+    </section>
 
-    <div id="info"></div>
+    <!-- Map -->
+    <section id="page-map" class="page">
+      <div id="map"></div>
+      <div id="map-readout" class="map-overlay">
+        <span id="map-climb">–</span> <small>m/s</small> · <span id="map-altitude">–</span>
+        <small>m</small>
+      </div>
+      <button id="follow" class="map-overlay on">Folgen</button>
+      <div id="map-message" class="map-overlay"></div>
+    </section>
 
-    <h2>Sensoren</h2>
-    <table>
-      <thead>
-        <tr>
-          <th></th>
-          <th>Anzahl</th>
-          <th>Rate Hz</th>
-          <th>Alter s</th>
-          <th>längste Pause s</th>
-        </tr>
-      </thead>
-      <tbody id="sensors"></tbody>
-    </table>
+    <!-- Settings -->
+    <section id="page-settings" class="page">
+      <h2>Vario-Ton</h2>
+      <div class="setting">
+        <label for="set-climb">Steigton ab <output id="out-climb"></output></label>
+        <input id="set-climb" type="range" min="0" max="2" step="0.1" />
+      </div>
+      <div class="setting">
+        <label for="set-sink">Sinkton ab <output id="out-sink"></output></label>
+        <input id="set-sink" type="range" min="-6" max="-0.5" step="0.1" />
+      </div>
+      <div class="setting">
+        <label for="set-volume">Lautstärke <output id="out-volume"></output></label>
+        <input id="set-volume" type="range" min="0" max="1" step="0.05" />
+      </div>
+      <div class="setting">
+        <label for="set-damping">Dämpfung <output id="out-damping"></output></label>
+        <input id="set-damping" type="range" min="0" max="5" step="0.1" />
+        <small>Mittelungszeit des Varios: größer ist ruhiger, reagiert aber später.</small>
+      </div>
+      <div id="settings-message"></div>
+      <div class="row">
+        <button id="tone-climb" class="button" disabled>Testton Steigen</button>
+        <button id="tone-sink" class="button" disabled>Testton Sinken</button>
+      </div>
+      <small class="hint">Testtöne gehen nur, während das Vario läuft.</small>
+      <div class="row" style="margin-top: 14px">
+        <button id="reset-settings" class="button">Standardwerte</button>
+      </div>
 
-    <h2>Protokoll (alle 10 s, Zeiten in UTC)</h2>
-    <div id="log"></div>
+      <h2>Karte</h2>
+      <div class="setting">
+        <label for="set-map-style">Kartenstil (URL)</label>
+        <input id="set-map-style" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" />
+        <small>
+          Adresse eines MapLibre-Stils. Standard: OpenFreeMap. Leer lassen für den Standard.
+        </small>
+      </div>
+      <div class="row">
+        <button id="save-map-style" class="button">Kartenstil übernehmen</button>
+      </div>
+    </section>
 
-    <script>
-      const invoke = window.__TAURI__.core.invoke;
-      const $ = (id) => document.getElementById(id);
+    <!-- Sensor diagnostics -->
+    <section id="page-sensors" class="page">
+      <h2>Sensoren</h2>
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>Anzahl</th>
+            <th>Rate Hz</th>
+            <th>Alter s</th>
+            <th>längste Pause s</th>
+          </tr>
+        </thead>
+        <tbody id="sensors"></tbody>
+      </table>
+      <h2>Protokoll (alle 10 s, Zeiten in UTC)</h2>
+      <div id="log"></div>
+    </section>
 
-      let running = false;
-      let testTone = null;
+    <nav id="tabs">
+      <button data-page="instruments" class="active">Instrumente</button>
+      <button data-page="map">Karte</button>
+      <button data-page="settings">Einstellungen</button>
+      <button data-page="sensors">Sensoren</button>
+    </nav>
 
-      const number = (value, digits = 0) =>
-        value === null || value === undefined ? "–" : value.toFixed(digits);
-
-      // Expected longest normal pause per sensor; anything above is highlighted.
-      const sensorRows = [
-        ["Beschleunigung", "accel", 0.5],
-        ["Luftdruck", "pressure", 3],
-        ["GPS", "gps", 3],
-      ];
-
-      function render(status) {
-        const climb = status ? status.climbRateMps : null;
-        const climbElement = $("climb");
-        climbElement.textContent =
-          climb === null || climb === undefined
-            ? "–"
-            : (climb >= 0 ? "+" : "−") + Math.abs(climb).toFixed(1);
-        climbElement.className =
-          "climb" + (climb > 0.2 ? " up" : climb < -2.5 ? " down" : "");
-
-        $("altitude").textContent = number(status?.altitudeM);
-        const fix = status?.fix;
-        $("speed").textContent =
-          fix?.groundSpeedMps == null ? "–" : (fix.groundSpeedMps * 3.6).toFixed(0);
-        $("course").textContent = number(fix?.courseDeg);
-
-        $("sensors").innerHTML = sensorRows
-          .map(([label, key, limit]) => {
-            const stats = status?.[key];
-            if (!stats) return `<tr><td>${label}</td><td colspan="4">–</td></tr>`;
-            const stale = stats.ageS == null || stats.ageS > limit;
-            const gap = stats.longestGapS > limit;
-            return `<tr>
-              <td>${label}</td>
-              <td>${stats.total}</td>
-              <td>${stats.rateHz.toFixed(1)}</td>
-              <td class="${stale ? "bad" : ""}">${number(stats.ageS, 1)}</td>
-              <td class="${gap ? "bad" : ""}">${stats.longestGapS.toFixed(2)}</td>
-            </tr>`;
-          })
-          .join("");
-
-        if (status) {
-          const log = $("log");
-          const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 4;
-          log.textContent = status.summaries.join("\n");
-          if (atBottom) log.scrollTop = log.scrollHeight;
-        }
-      }
-
-      function setRunning(value) {
-        running = value;
-        $("toggle").textContent = running ? "Stopp" : "Start";
-        $("tone-climb").disabled = !running;
-        $("tone-sink").disabled = !running;
-      }
-
-      async function toggle() {
-        $("toggle").disabled = true;
-        try {
-          if (running) {
-            await invoke("stop");
-            setRunning(false);
-            $("info").textContent = "gestoppt";
-          } else {
-            const info = await invoke("start");
-            setRunning(true);
-            const s = info.sensors;
-            $("info").textContent = s.native
-              ? `Barometer: ${s.altimeter ? "ja" : "NEIN"} · Bewegung: ${s.motion ? "ja" : "NEIN"}\n` +
-                `Standort: ${s.locationAuthorization} · Audio-Session: ${s.audioSession}\n` +
-                `Ton: ${info.audio}\nLogs: ${info.logDir ?? "–"}`
-              : `Simulierter Flug (kein Gerät)\nTon: ${info.audio}\nLogs: ${info.logDir ?? "–"}`;
-          }
-        } catch (error) {
-          $("info").textContent = "Fehler: " + error;
-        }
-        $("toggle").disabled = false;
-      }
-
-      async function toggleTone(climb) {
-        testTone = testTone === climb ? null : climb;
-        await invoke("test_tone", { climbRateMps: testTone });
-        $("tone-climb").classList.toggle("primary", testTone === 2.5);
-        $("tone-sink").classList.toggle("primary", testTone === -4);
-      }
-
-      $("toggle").addEventListener("click", toggle);
-      $("tone-climb").addEventListener("click", () => toggleTone(2.5));
-      $("tone-sink").addEventListener("click", () => toggleTone(-4));
-
-      // The web view is paused while the screen is locked; that is fine, because
-      // everything important runs in Rust. After unlocking this simply resumes.
-      setInterval(async () => {
-        try {
-          render(await invoke("status"));
-        } catch (error) {
-          $("info").textContent = "Fehler: " + error;
-        }
-      }, 200);
-      render(null);
-    </script>
+    <script src="vendor/maplibre-gl/maplibre-gl.js"></script>
+    <script src="map.js"></script>
+    <script src="app.js"></script>
   </body>
 </html>

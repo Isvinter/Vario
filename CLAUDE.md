@@ -21,7 +21,7 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 | 1 | Workspace, `flight-core` (Sensor-Traits, IGC), `sensor-sim` | freigegeben |
 | 2 | Vario-Filter, `vario-audio`, CLI auf Linux | freigegeben |
 | 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | Workspace baut und testet auf Linux und macOS (Desktop-Selbsttest auf beiden); auf dem iPhone 13 Pro Max bestanden: Ton und Sensoren (50 Hz / 1 Hz) laufen gesperrt und im Hintergrund lückenlos, Tauri bleibt; offen nur der Test draußen (GPS, Akku, Anruf); Ergebnisse: `docs/ios-test.md`; wartet auf Freigabe |
-| 3 | App auf Linux (Instrumente, Einstellungen, Karte) | offen |
+| 3 | App auf Linux (Instrumente, Einstellungen, Karte) | umgesetzt, wartet auf Freigabe; geprüft auf macOS (Desktop-Selbsttest) und im iOS-Simulator, nicht auf Linux und nicht auf dem iPhone |
 | 4 | Aufzeichnung, Flugliste | offen |
 | 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | offen |
 
@@ -49,7 +49,8 @@ apps/
   vario-app/
     src-tauri/           Tauri app: glue only (commands, audio thread, desktop simulator)
     plugins/vario-sensors/  Tauri plugin; `ios/Sources` holds the Swift sensor bridge
-    ui/                  web UI (plain HTML/JS, no bundler)
+    ui/                  web UI (plain HTML/JS, no bundler); `vendor/` holds MapLibre GL JS 5
+                         as unmodified files (version 6 needs ES modules and a worker file)
 docs/ios-test.md         build and test instructions for the iOS test
 testdata/                real IGC files provided by the user
 ```
@@ -125,12 +126,13 @@ cargo run -p vario-cli -- --synthetic demo --noise --wav /tmp/demo.wav
 ```
 # App auf dem Desktop starten (simulierter Flug)
 cargo run -p vario-app
-# Selbsttest: drückt selbst auf Start, gibt nach 14 s den Seiteninhalt aus und beendet sich
+# Selbsttest: drückt selbst auf Start, öffnet die Karte, gibt Seiteninhalt, Anzahl der
+# Track-Punkte und Skriptfehler aus und beendet sich
 VARIO_SMOKE_TEST=1 cargo run -p vario-app
 ```
 
-Offen aus Phase 2: Einstellungen werden noch nicht dauerhaft gespeichert (kommt mit der
-Einstellungsseite in Phase 3).
+Einstellungen liegen als Textdatei (`settings.txt`, Kartenstil in `map-style.txt`) im
+Konfigurationsordner der App; das Format definiert `flight-core`.
 
 Rust ist per `rustup` im Home-Verzeichnis installiert (`~/.cargo/bin`). Auf dem Mac läuft
 die Shell von Claude Code unter Rosetta; die Toolchain ist trotzdem nativ arm64

@@ -1,0 +1,342 @@
+/* High contrast, large numbers: the display must be readable in sunlight. */
+:root {
+  color-scheme: light;
+  --ink: #000;
+  --paper: #fff;
+  --muted: #444;
+  --line: #999;
+  --climb: #0a6b2a;
+  --sink: #b3261e;
+  --tabs-height: 60px;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  font: 16px/1.4 system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-text-size-adjust: 100%;
+  overflow: hidden;
+}
+
+/* ---- Pages and tab bar ---- */
+.page {
+  position: absolute;
+  inset: 0 0 calc(var(--tabs-height) + env(safe-area-inset-bottom)) 0;
+  padding: calc(env(safe-area-inset-top) + 12px) 16px 16px;
+  overflow-y: auto;
+  display: none;
+}
+.page.active {
+  display: block;
+}
+#tabs {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: calc(var(--tabs-height) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  display: flex;
+  border-top: 2px solid var(--ink);
+  background: var(--paper);
+}
+#tabs button {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--paper);
+}
+#tabs button.active {
+  color: var(--paper);
+  background: var(--ink);
+}
+
+/* ---- Buttons ---- */
+.button {
+  min-height: 52px;
+  padding: 0 14px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+}
+.button.primary,
+.button.on {
+  color: var(--paper);
+  background: var(--ink);
+}
+.button:disabled {
+  opacity: 0.35;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.row .button {
+  flex: 1;
+}
+
+/* ---- Instruments ---- */
+#page-instruments.active {
+  display: flex;
+  flex-direction: column;
+}
+.vario {
+  flex: 1;
+  min-height: 150px;
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+}
+/* Bar that fills upwards (climb) or downwards (sink) from the middle. */
+.bar {
+  position: relative;
+  width: 34px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.bar::after {
+  content: "";
+  position: absolute;
+  inset: 50% 0 auto 0;
+  border-top: 2px solid var(--ink);
+}
+#bar-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+}
+#bar-fill.up {
+  bottom: 50%;
+  background: var(--climb);
+}
+#bar-fill.down {
+  top: 50%;
+  background: var(--sink);
+}
+.vario-number {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+#climb {
+  font-size: min(30vw, 132px);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+#climb.up {
+  color: var(--climb);
+}
+#climb.down {
+  color: var(--sink);
+}
+.unit {
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 600;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin: 14px 0;
+  text-align: center;
+}
+.tiles div {
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  padding: 8px 2px;
+  min-width: 0;
+}
+.tiles b {
+  display: block;
+  font-size: min(10vw, 44px);
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.tiles span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+#toggle {
+  width: 100%;
+  min-height: 60px;
+  font-size: 20px;
+}
+#info {
+  margin-top: 8px;
+  min-height: 1.4em;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---- Map ---- */
+#page-map {
+  padding: 0;
+  overflow: hidden;
+}
+#map {
+  position: absolute;
+  inset: 0;
+}
+.map-overlay {
+  position: absolute;
+  z-index: 2;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  font-weight: 700;
+}
+#map-readout {
+  top: calc(env(safe-area-inset-top) + 10px);
+  left: 10px;
+  padding: 4px 10px;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+#map-readout small {
+  font-size: 13px;
+  color: var(--muted);
+}
+#follow {
+  top: calc(env(safe-area-inset-top) + 10px);
+  right: 10px;
+  min-height: 44px;
+  padding: 0 12px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--ink);
+}
+#follow.on {
+  color: var(--paper);
+  background: var(--ink);
+}
+#map-message {
+  left: 10px;
+  right: 10px;
+  bottom: 40px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  display: none;
+}
+.position-marker {
+  width: 26px;
+  height: 26px;
+}
+.position-marker svg {
+  display: block;
+}
+
+/* ---- Settings ---- */
+h2 {
+  font-size: 17px;
+  margin: 20px 0 8px;
+}
+h2:first-child {
+  margin-top: 0;
+}
+.setting {
+  margin-bottom: 14px;
+}
+.setting label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: 600;
+}
+.setting output {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.setting input[type="range"] {
+  width: 100%;
+  height: 40px;
+  margin: 0;
+  accent-color: var(--ink);
+}
+.setting small,
+.hint {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+}
+input[type="text"] {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 10px;
+  font: 14px ui-monospace, Menlo, monospace;
+  color: var(--ink);
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+#settings-message {
+  min-height: 1.4em;
+  margin: 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sink);
+}
+
+/* ---- Sensors (diagnostics) ---- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+th,
+td {
+  text-align: right;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+th:first-child,
+td:first-child {
+  text-align: left;
+}
+td.bad {
+  color: var(--sink);
+  font-weight: 700;
+}
+#log {
+  font: 12px/1.45 ui-monospace, Menlo, monospace;
+  color: var(--muted);
+  max-height: 45vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  white-space: pre;
+  -webkit-user-select: text;
+  user-select: text;
+}
