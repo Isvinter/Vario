@@ -20,7 +20,7 @@ use crate::settings::SettingsDto;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_vario_sensors::{SensorStart, VarioSensorsExt};
 use vario_audio::voice::ToneControl;
-use vario_engine::{Engine, Status};
+use vario_engine::{Engine, Status, TrackPoint};
 
 use crate::audio::AudioThread;
 
@@ -152,6 +152,16 @@ fn status(state: State<'_, AppState>) -> Option<Status> {
         .map(|session| session.engine.status())
 }
 
+/// The track points from index `from` on; empty while stopped.
+#[tauri::command]
+fn track(state: State<'_, AppState>, from: usize) -> Vec<TrackPoint> {
+    state
+        .session()
+        .as_ref()
+        .map(|session| session.engine.track_since(from))
+        .unwrap_or_default()
+}
+
 /// Plays the tone for the given climb rate regardless of the sensors; `null` ends it.
 #[tauri::command]
 fn test_tone(state: State<'_, AppState>, climb_rate_mps: Option<f64>) {
@@ -180,6 +190,7 @@ pub fn run() {
             start,
             stop,
             status,
+            track,
             test_tone,
             get_settings,
             set_settings,

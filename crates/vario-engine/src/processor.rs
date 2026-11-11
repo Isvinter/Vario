@@ -15,6 +15,18 @@ use vario_audio::voice::ToneControl;
 
 /// Number of summary lines kept for display.
 const MAX_SUMMARIES: usize = 400;
+/// Shortest time between two track points. Slightly below one second so that a GPS
+/// delivering at 1 Hz with a little jitter does not lose every other point.
+const TRACK_INTERVAL_S: f64 = 0.9;
+
+/// One point of the flown track, for drawing it on the map.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackPoint {
+    pub latitude_deg: f64,
+    pub longitude_deg: f64,
+    pub altitude_m: f64,
+}
 
 /// A snapshot of the engine state for the user interface.
 ///
@@ -132,6 +144,9 @@ pub struct Processor {
     filter: VarioFilter,
     test_climb_mps: Option<f64>,
     last_fix: Option<GpsFix>,
+    /// Track points not yet handed out by [`Processor::take_track_points`].
+    new_track_points: Vec<TrackPoint>,
+    last_track_time: Option<Timestamp>,
     accel: Tracker,
     pressure: Tracker,
     gps: Tracker,
@@ -149,6 +164,8 @@ impl Processor {
             filter,
             test_climb_mps: None,
             last_fix: None,
+            new_track_points: Vec::new(),
+            last_track_time: None,
             accel: Tracker::default(),
             pressure: Tracker::default(),
             gps: Tracker::default(),
@@ -198,6 +215,7 @@ impl Processor {
             SensorEvent::Gps(fix) => {
                 self.gps.record(fix.time);
                 self.last_fix = Some(*fix);
+                self.add_track_point(fix);
             }
         }
         self.filter.handle(event);
@@ -208,6 +226,26 @@ impl Processor {
             None => Ok(()),
         };
         self.note_log_result(written);
+    }
+
+    fn add_track_point(&mut self, fix: &GpsFix) {
+        let due = self
+            .last_track_time
+            .is_none_or(|last| fix.time.seconds_since(last) >= TRACK_INTERVAL_S);
+        if due {
+            self.last_track_time = Some(fix.time);
+            self.new_track_points.push(TrackPoint {
+                latitude_deg: fix.latitude_deg,
+                longitude_deg: fix.longitude_deg,
+                altitude_m: fix.altitude_m,
+            });
+        }
+    }
+
+    /// Hands out the track points (at most one per second) recorded since the last
+    /// call. `std::mem::take` moves the list out and leaves an empty one behind.
+    pub fn take_track_points(&mut self) -> Vec<TrackPoint> {
+        std::mem::take(&mut self.new_track_points)
     }
 
     /// Closes the current statistics interval of `interval_s` seconds and records a
@@ -405,6 +443,31 @@ mod tests {
              gps   1.1 Hz gap  1.00 s | alt 1540.0 m climb +2.00 m/s"
         );
         assert!(is_audible(&control), "climbing at 2 m/s must beep");
+    }
+
+    #[test]
+    fn track_has_one_point_per_second_and_is_handed_out_once() {
+        let (mut processor, _) = processor();
+        climb_simulation(20.0).run_fast(|event| processor.handle(&event));
+
+        let points = processor.take_track_points();
+        assert_eq!(points.len(), 21, "fixes at 0 s to 20 s");
+        assert!((points[20].altitude_m - points[0].altitude_m - 40.0).abs() < 1.0);
+        assert!(processor.take_track_points().is_empty());
+
+        // Fixes arriving faster than 1 Hz are thinned out.
+        let mut first_fix = None;
+        climb_simulation(1.0).run_fast(|event| {
+            if let SensorEvent::Gps(fix) = event {
+                first_fix.get_or_insert(fix);
+            }
+        });
+        let fix = first_fix.expect("the simulation delivers GPS fixes");
+        for tenth in 0..25 {
+            let time = Timestamp::from_secs(100.0 + f64::from(tenth) * 0.1);
+            processor.handle(&SensorEvent::Gps(GpsFix { time, ..fix }));
+        }
+        assert_eq!(processor.take_track_points().len(), 3);
     }
 
     #[test]

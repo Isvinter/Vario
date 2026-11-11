@@ -22,7 +22,7 @@ use flight_core::settings::VarioSettings;
 use flight_core::time::UtcDateTime;
 use vario_audio::voice::ToneControl;
 
-pub use crate::processor::{FixInfo, Processor, SensorStats, Status};
+pub use crate::processor::{FixInfo, Processor, SensorStats, Status, TrackPoint};
 
 /// How often a summary line is written and the sensor rates are refreshed.
 const SUMMARY_INTERVAL: Duration = Duration::from_secs(10);
@@ -38,6 +38,8 @@ struct Shared {
     test_climb_mps: Mutex<Option<f64>>,
     /// Settings changed by the user that the engine thread has not applied yet.
     pending_settings: Mutex<Option<VarioSettings>>,
+    /// The flown track since the engine started, one point per second.
+    track: Mutex<Vec<TrackPoint>>,
 }
 
 /// A running engine. Stops when [`Engine::stop`] is called or the value is dropped.
@@ -82,6 +84,16 @@ impl Engine {
     /// `None` returns to normal operation.
     pub fn set_test_climb(&self, climb_rate_mps: Option<f64>) {
         *lock(&self.shared.test_climb_mps) = climb_rate_mps;
+    }
+
+    /// The track points from index `from` on. The UI remembers how many points it
+    /// already has and asks only for the new ones, so the amount of data per request
+    /// stays small however long the flight is.
+    pub fn track_since(&self, from: usize) -> Vec<TrackPoint> {
+        lock(&self.shared.track)
+            .get(from..)
+            .map(<[TrackPoint]>::to_vec)
+            .unwrap_or_default()
     }
 
     /// Changes the settings while running. The engine thread picks them up within a
@@ -140,6 +152,10 @@ fn run(mut processor: Processor, events: Receiver<SensorEvent>, shared: &Shared)
         if last_summary.elapsed() >= SUMMARY_INTERVAL {
             processor.summarize(last_summary.elapsed().as_secs_f64(), &utc_clock_label());
             last_summary = Instant::now();
+        }
+        let new_points = processor.take_track_points();
+        if !new_points.is_empty() {
+            lock(&shared.track).extend(new_points);
         }
         *lock(&shared.status) = processor.status(started.elapsed().as_secs_f64(), true);
     }
