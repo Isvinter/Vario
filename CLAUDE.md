@@ -22,7 +22,7 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 | 2 | Vario-Filter, `vario-audio`, CLI auf Linux | freigegeben |
 | 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | Workspace baut und testet auf Linux und macOS (Desktop-Selbsttest auf beiden); auf dem iPhone 13 Pro Max bestanden: Ton und Sensoren (50 Hz / 1 Hz) laufen gesperrt und im Hintergrund lückenlos, Tauri bleibt; offen nur der Test draußen (GPS, Akku, Anruf); Ergebnisse: `docs/ios-test.md`; wartet auf Freigabe |
 | 3 | App auf Linux (Instrumente, Einstellungen, Karte) | freigegeben (geprüft auf macOS und im iOS-Simulator; auf Linux seit Phase 2b nicht mehr geprüft) |
-| 4 | Aufzeichnung, Flugliste | umgesetzt, wartet auf Freigabe; geprüft auf macOS (Desktop-Selbsttest) und im iOS-Simulator, nicht auf dem iPhone und nicht auf Linux |
+| 4 | Aufzeichnung, Flugliste | freigegeben (geprüft auf macOS und im iOS-Simulator; auf Linux nicht geprüft) |
 | 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | offen |
 
 Den Status hier nach jeder Freigabe aktualisieren.
