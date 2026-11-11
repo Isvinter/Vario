@@ -3,12 +3,15 @@
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use flight_core::flightlog;
+use flight_core::igc::FlightMeta;
 use flight_core::sensor::{GpsFix, SensorEvent};
 use flight_core::settings::VarioSettings;
 use flight_core::time::Timestamp;
+use flight_core::track::TrackRecorder;
 use flight_core::vario::VarioFilter;
 use serde::Serialize;
 use vario_audio::voice::ToneControl;
@@ -18,6 +21,18 @@ const MAX_SUMMARIES: usize = 400;
 /// Shortest time between two track points. Slightly below one second so that a GPS
 /// delivering at 1 Hz with a little jitter does not lose every other point.
 const TRACK_INTERVAL_S: f64 = 0.9;
+
+/// State of the flight recording.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordingInfo {
+    /// Name of the IGC file; `None` until the first fix has been saved.
+    pub file_name: Option<String>,
+    /// Number of fixes recorded so far (one per second).
+    pub fix_count: usize,
+    /// Why the last attempt to save failed, if it did.
+    pub error: Option<String>,
+}
 
 /// One point of the flown track, for drawing it on the map.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -44,6 +59,8 @@ pub struct Status {
     pub accel_bias_mps2: Option<f64>,
     /// `true` while a test climb rate overrides the sensors for the tone.
     pub test_tone: bool,
+    /// The flight recording, if recording is on.
+    pub recording: Option<RecordingInfo>,
     pub fix: Option<FixInfo>,
     pub accel: SensorStats,
     pub pressure: SensorStats,
@@ -139,6 +156,61 @@ struct Logs {
     raw_path: String,
 }
 
+/// Records the flight and keeps its IGC file up to date.
+struct Recording {
+    recorder: TrackRecorder,
+    dir: PathBuf,
+    /// Chosen when the first fix is saved, because the name contains the start time.
+    path: Option<PathBuf>,
+    saved_fixes: usize,
+    error: Option<String>,
+}
+
+impl Recording {
+    /// Writes the flight to its file if fixes were added since the last save.
+    ///
+    /// The whole file is written to a temporary file which then replaces the old one.
+    /// Whatever happens (crash, battery empty), the file on disk is always a complete,
+    /// valid IGC file, at most one save interval behind.
+    fn save(&mut self) -> io::Result<()> {
+        let fix_count = self.recorder.fixes().len();
+        let (Some(start), Some(file)) = (self.recorder.start(), self.recorder.to_igc()) else {
+            return Ok(());
+        };
+        if fix_count == self.saved_fixes {
+            return Ok(());
+        }
+        let path = match &self.path {
+            Some(path) => path.clone(),
+            None => {
+                std::fs::create_dir_all(&self.dir)?;
+                let path = unused_path(&self.dir, &flightlog::file_name(start));
+                self.path = Some(path.clone());
+                path
+            }
+        };
+        let temporary = path.with_extension("tmp");
+        std::fs::write(&temporary, file.to_string())?;
+        std::fs::rename(&temporary, &path)?;
+        self.saved_fixes = fix_count;
+        Ok(())
+    }
+}
+
+/// `dir/name`, or with `-2`, `-3`, ... before the extension if that file exists, so an
+/// existing flight is never overwritten.
+fn unused_path(dir: &Path, name: &str) -> PathBuf {
+    let first = dir.join(name);
+    if !first.exists() {
+        return first;
+    }
+    let stem = name.strip_suffix(".igc").unwrap_or(name);
+    (2..)
+        .map(|number| dir.join(format!("{stem}-{number}.igc")))
+        .find(|path| !path.exists())
+        .unwrap_or(first)
+}
+
 pub struct Processor {
     control: ToneControl,
     filter: VarioFilter,
@@ -152,6 +224,7 @@ pub struct Processor {
     gps: Tracker,
     summaries: VecDeque<String>,
     logs: Option<Logs>,
+    recording: Option<Recording>,
 }
 
 impl Processor {
@@ -171,6 +244,7 @@ impl Processor {
             gps: Tracker::default(),
             summaries: VecDeque::new(),
             logs: None,
+            recording: None,
         }
     }
 
@@ -192,6 +266,38 @@ impl Processor {
             raw_path: raw_path.to_string_lossy().into_owned(),
         });
         Ok(())
+    }
+
+    /// Turns on flight recording: the track is saved as an IGC file in `dir`, named
+    /// after the time of the first GPS fix. Nothing is written before the first fix.
+    pub fn record_flight(&mut self, dir: &Path) {
+        self.recording = Some(Recording {
+            recorder: TrackRecorder::new(FlightMeta::default()),
+            dir: dir.to_owned(),
+            path: None,
+            saved_fixes: 0,
+            error: None,
+        });
+    }
+
+    /// Brings the flight file up to date. Called regularly and at the end.
+    pub fn save_flight(&mut self) {
+        let Some(recording) = &mut self.recording else {
+            return;
+        };
+        let error = recording.save().err().map(|error| error.to_string());
+        // Report a problem once, not every few seconds; and keep trying, because the
+        // track is still in memory and the next attempt may succeed.
+        if error.is_some() && error != recording.error {
+            let line = format!(
+                "saving the flight failed: {}",
+                error.as_deref().unwrap_or("")
+            );
+            recording.error = error;
+            self.push_summary(line);
+        } else {
+            recording.error = error;
+        }
     }
 
     /// Applies changed settings: thresholds and volume to the tone, damping to the
@@ -219,6 +325,9 @@ impl Processor {
             }
         }
         self.filter.handle(event);
+        if let Some(recording) = &mut self.recording {
+            recording.recorder.handle(event);
+        }
         self.update_tone();
 
         let written = match &mut self.logs {
@@ -282,6 +391,7 @@ impl Processor {
         };
         self.push_summary(line);
         self.note_log_result(written);
+        self.save_flight();
     }
 
     /// Turns the tone off.
@@ -298,6 +408,15 @@ impl Processor {
             climb_rate_mps: reading.map(|r| r.climb_rate_mps),
             accel_bias_mps2: self.filter.accel_bias_mps2(),
             test_tone: self.test_climb_mps.is_some(),
+            recording: self.recording.as_ref().map(|recording| RecordingInfo {
+                file_name: recording
+                    .path
+                    .as_ref()
+                    .and_then(|path| path.file_name())
+                    .map(|name| name.to_string_lossy().into_owned()),
+                fix_count: recording.recorder.fixes().len(),
+                error: recording.error.clone(),
+            }),
             fix: self.last_fix.map(|fix| FixInfo {
                 latitude_deg: fix.latitude_deg,
                 longitude_deg: fix.longitude_deg,
@@ -468,6 +587,59 @@ mod tests {
             processor.handle(&SensorEvent::Gps(GpsFix { time, ..fix }));
         }
         assert_eq!(processor.take_track_points().len(), 3);
+    }
+
+    #[test]
+    fn records_the_flight_as_an_igc_file_and_never_overwrites_one() {
+        let dir = std::env::temp_dir().join(format!("vario-flight-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let (mut first, _) = processor();
+        first.record_flight(&dir);
+        first.save_flight();
+        assert!(!dir.exists(), "nothing is written before the first fix");
+
+        // Save half way through, as the engine does regularly, and again at the end.
+        let mut half_way_saved = false;
+        climb_simulation(20.0).run_fast(|event| {
+            if event.time().as_secs() > 10.0 && !half_way_saved {
+                first.save_flight();
+                half_way_saved = true;
+            }
+            first.handle(&event);
+        });
+        first.save_flight();
+
+        let info = first.status(20.0, true).recording.unwrap();
+        assert_eq!(info.file_name.as_deref(), Some("2026-07-28-100000.igc"));
+        assert_eq!(info.fix_count, 21);
+        assert_eq!(info.error, None);
+
+        let text = std::fs::read_to_string(dir.join("2026-07-28-100000.igc")).unwrap();
+        let file = flight_core::igc::IgcFile::parse(&text).unwrap();
+        let summary = flightlog::summarize(&file).unwrap();
+        assert_eq!(summary.fix_count, 21);
+        assert_eq!(summary.duration_s, 20);
+        assert_eq!(summary.max_altitude_m - summary.start_altitude_m, 40);
+        let first = file.fixes().next().unwrap();
+        assert!(
+            (first.pressure_altitude_m - 1500).abs() <= 1,
+            "pressure altitude recorded"
+        );
+
+        // A second flight starting in the same second gets a name of its own.
+        let (mut second, _) = processor();
+        second.record_flight(&dir);
+        climb_simulation(3.0).run_fast(|event| second.handle(&event));
+        second.save_flight();
+        assert!(dir.join("2026-07-28-100000-2.igc").exists());
+        assert_eq!(
+            std::fs::read_dir(&dir).unwrap().count(),
+            2,
+            "no temporary files left"
+        );
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

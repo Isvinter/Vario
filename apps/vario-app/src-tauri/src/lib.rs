@@ -20,6 +20,7 @@ use crate::settings::SettingsDto;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_vario_sensors::{SensorStart, VarioSensorsExt};
 use vario_audio::voice::ToneControl;
+use vario_engine::flights::{self, FlightEntry};
 use vario_engine::{Engine, Status, TrackPoint};
 
 use crate::audio::AudioThread;
@@ -94,9 +95,15 @@ async fn start(app: AppHandle, state: State<'_, AppState>) -> Result<StartInfo, 
     };
 
     let log_dir = log_dir(&app);
-    let engine = Engine::start(events, control, &settings, log_dir.clone())
-        .map_err(|error| format!("could not start: {error}"))
-        .inspect_err(|_| sensor_bridge::disconnect())?;
+    let engine = Engine::start(
+        events,
+        control,
+        &settings,
+        log_dir.clone(),
+        flights_dir(&app),
+    )
+    .map_err(|error| format!("could not start: {error}"))
+    .inspect_err(|_| sensor_bridge::disconnect())?;
 
     *state.session() = Some(Session {
         engine,
@@ -178,6 +185,26 @@ fn track(state: State<'_, AppState>, from: usize) -> Vec<TrackPoint> {
         .unwrap_or_default()
 }
 
+/// All recorded flights, newest first.
+#[tauri::command]
+async fn list_flights(app: AppHandle) -> Result<Vec<FlightEntry>, String> {
+    let dir = flights_dir(&app).ok_or("no flights folder")?;
+    flights::list(&dir).map_err(|error| error.to_string())
+}
+
+/// The track of one recorded flight.
+#[tauri::command]
+async fn flight_track(app: AppHandle, file_name: String) -> Result<Vec<TrackPoint>, String> {
+    let dir = flights_dir(&app).ok_or("no flights folder")?;
+    flights::track(&dir, &file_name).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn delete_flight(app: AppHandle, file_name: String) -> Result<(), String> {
+    let dir = flights_dir(&app).ok_or("no flights folder")?;
+    flights::delete(&dir, &file_name).map_err(|error| error.to_string())
+}
+
 /// Plays the tone for the given climb rate regardless of the sensors; `null` ends it.
 #[tauri::command]
 fn test_tone(state: State<'_, AppState>, climb_rate_mps: Option<f64>) {
@@ -186,15 +213,25 @@ fn test_tone(state: State<'_, AppState>, climb_rate_mps: Option<f64>) {
     }
 }
 
-/// Where the sensor logs go. On iOS this is the app's Documents folder, which the
-/// Files app shows (see `Info.ios.plist`).
-fn log_dir(app: &AppHandle) -> Option<PathBuf> {
+/// Where the files the user may want to get at are kept. On iOS this is the app's
+/// Documents folder, which the Files app shows (see `Info.ios.plist`).
+fn data_dir(app: &AppHandle) -> Option<PathBuf> {
     let base = if cfg!(target_os = "ios") {
         app.path().document_dir()
     } else {
         app.path().app_data_dir()
     };
-    base.ok().map(|dir| dir.join("logs"))
+    base.ok()
+}
+
+/// Where the sensor logs go.
+fn log_dir(app: &AppHandle) -> Option<PathBuf> {
+    data_dir(app).map(|dir| dir.join("logs"))
+}
+
+/// Where the recorded flights (IGC files) go.
+fn flights_dir(app: &AppHandle) -> Option<PathBuf> {
+    data_dir(app).map(|dir| dir.join("flights"))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -207,6 +244,9 @@ pub fn run() {
             stop,
             status,
             track,
+            list_flights,
+            flight_track,
+            delete_flight,
             test_tone,
             get_settings,
             set_settings,

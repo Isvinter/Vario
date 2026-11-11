@@ -7,6 +7,7 @@
 //! * [`processor`] holds the actual logic, without threads, so it can be tested directly.
 //! * [`Engine`] wraps it in a thread.
 
+pub mod flights;
 pub mod processor;
 
 use std::io;
@@ -22,7 +23,7 @@ use flight_core::settings::VarioSettings;
 use flight_core::time::UtcDateTime;
 use vario_audio::voice::ToneControl;
 
-pub use crate::processor::{FixInfo, Processor, SensorStats, Status, TrackPoint};
+pub use crate::processor::{FixInfo, Processor, RecordingInfo, SensorStats, Status, TrackPoint};
 
 /// How often a summary line is written and the sensor rates are refreshed.
 const SUMMARY_INTERVAL: Duration = Duration::from_secs(10);
@@ -52,13 +53,18 @@ impl Engine {
     /// Starts the engine thread.
     ///
     /// `log_dir`: if given, a raw sensor log and a summary log are written there.
+    /// `flights_dir`: if given, the flight is recorded there as an IGC file.
     pub fn start(
         events: Receiver<SensorEvent>,
         control: ToneControl,
         settings: &VarioSettings,
         log_dir: Option<PathBuf>,
+        flights_dir: Option<PathBuf>,
     ) -> io::Result<Engine> {
         let mut processor = Processor::new(control, settings);
+        if let Some(dir) = &flights_dir {
+            processor.record_flight(dir);
+        }
         if let Some(dir) = &log_dir {
             processor.open_logs(dir, &timestamp_for_file_name())?;
         }
@@ -226,7 +232,8 @@ mod tests {
     fn engine_processes_events_from_another_thread_and_stops() {
         let (sender, receiver) = mpsc::channel();
         let control = ToneControl::new(&VarioSettings::default());
-        let engine = Engine::start(receiver, control, &VarioSettings::default(), None).unwrap();
+        let engine =
+            Engine::start(receiver, control, &VarioSettings::default(), None, None).unwrap();
 
         sender
             .send(SensorEvent::Pressure(PressureSample {
@@ -257,7 +264,8 @@ mod tests {
     fn engine_ends_when_the_channel_closes() {
         let (sender, receiver) = mpsc::channel::<SensorEvent>();
         let control = ToneControl::new(&VarioSettings::default());
-        let engine = Engine::start(receiver, control, &VarioSettings::default(), None).unwrap();
+        let engine =
+            Engine::start(receiver, control, &VarioSettings::default(), None, None).unwrap();
         drop(sender);
         let status = wait_for(&engine, |status| !status.running && status.uptime_s > 0.0);
         assert!(!status.running);
