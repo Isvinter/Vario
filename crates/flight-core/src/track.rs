@@ -73,6 +73,11 @@ impl TrackRecorder {
         self.last_recorded = Some(fix.utc);
     }
 
+    /// UTC date and time of the first recorded fix.
+    pub fn start(&self) -> Option<UtcDateTime> {
+        self.start
+    }
+
     /// The fixes recorded so far.
     pub fn fixes(&self) -> &[IgcFix] {
         &self.fixes

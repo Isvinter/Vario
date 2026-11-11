@@ -5,6 +5,7 @@
 //! keeps replay, accelerated simulation and tests deterministic.
 
 pub mod atmosphere;
+pub mod flightlog;
 pub mod geo;
 pub mod igc;
 pub mod sensor;
