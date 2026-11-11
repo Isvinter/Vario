@@ -5,6 +5,7 @@
 //! On the desktop the sensors are replaced by a simulated flight.
 
 mod audio;
+mod settings;
 #[cfg(desktop)]
 mod sim;
 mod smoke;
@@ -14,6 +15,8 @@ use std::sync::Mutex;
 
 use flight_core::settings::VarioSettings;
 use serde::Serialize;
+
+use crate::settings::SettingsDto;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_vario_sensors::{SensorStart, VarioSensorsExt};
 use vario_audio::voice::ToneControl;
@@ -35,11 +38,19 @@ struct Session {
 #[derive(Default)]
 struct AppState {
     session: Mutex<Option<Session>>,
+    /// The current settings; loaded from the settings file when the app starts.
+    settings: Mutex<VarioSettings>,
 }
 
 impl AppState {
     fn session(&self) -> std::sync::MutexGuard<'_, Option<Session>> {
         self.session
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn settings(&self) -> std::sync::MutexGuard<'_, VarioSettings> {
+        self.settings
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
@@ -64,7 +75,8 @@ async fn start(app: AppHandle, state: State<'_, AppState>) -> Result<StartInfo, 
         return Err("already running".to_owned());
     }
 
-    let settings = VarioSettings::default();
+    // `*` copies the settings out of the lock, which is released right away.
+    let settings = *state.settings();
     let control = ToneControl::new(&settings);
     // Open the channel first so no sample of the sensors started next is lost.
     let events = sensor_bridge::connect();
@@ -110,6 +122,27 @@ async fn stop(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> 
     result
 }
 
+#[tauri::command]
+fn get_settings(state: State<'_, AppState>) -> SettingsDto {
+    (*state.settings()).into()
+}
+
+/// Checks, applies and saves new settings. A running vario uses them immediately.
+#[tauri::command]
+fn set_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    settings: SettingsDto,
+) -> Result<(), String> {
+    let settings = VarioSettings::from(settings);
+    settings.validate().map_err(|error| error.to_string())?;
+    *state.settings() = settings;
+    if let Some(session) = state.session().as_ref() {
+        session.engine.set_settings(settings);
+    }
+    settings::save(&app, &settings)
+}
+
 /// The current engine status, or `null` while stopped.
 #[tauri::command]
 fn status(state: State<'_, AppState>) -> Option<Status> {
@@ -148,9 +181,12 @@ pub fn run() {
             stop,
             status,
             test_tone,
+            get_settings,
+            set_settings,
             smoke::smoke_report
         ])
         .setup(|app| {
+            *app.state::<AppState>().settings() = settings::load(app.handle());
             smoke::maybe_run(app.handle());
             Ok(())
         })

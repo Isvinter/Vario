@@ -36,6 +36,8 @@ struct Shared {
     stop: AtomicBool,
     /// Climb rate that overrides the filter output, for testing the tone.
     test_climb_mps: Mutex<Option<f64>>,
+    /// Settings changed by the user that the engine thread has not applied yet.
+    pending_settings: Mutex<Option<VarioSettings>>,
 }
 
 /// A running engine. Stops when [`Engine::stop`] is called or the value is dropped.
@@ -82,6 +84,12 @@ impl Engine {
         *lock(&self.shared.test_climb_mps) = climb_rate_mps;
     }
 
+    /// Changes the settings while running. The engine thread picks them up within a
+    /// fraction of a second.
+    pub fn set_settings(&self, settings: VarioSettings) {
+        *lock(&self.shared.pending_settings) = Some(settings);
+    }
+
     /// Stops the thread and waits until it has written its logs.
     pub fn stop(mut self) {
         self.shut_down();
@@ -109,6 +117,10 @@ fn run(mut processor: Processor, events: Receiver<SensorEvent>, shared: &Shared)
     let mut last_summary = Instant::now();
 
     while !shared.stop.load(Ordering::Relaxed) {
+        // `take` empties the slot, so each change is applied exactly once.
+        if let Some(settings) = lock(&shared.pending_settings).take() {
+            processor.set_settings(&settings);
+        }
         // Sleep until a sample arrives, but wake up regularly to notice `stop`.
         match events.recv_timeout(IDLE_WAKEUP) {
             Ok(event) => {

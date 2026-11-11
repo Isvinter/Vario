@@ -177,6 +177,14 @@ impl Processor {
         Ok(())
     }
 
+    /// Applies changed settings: thresholds and volume to the tone, damping to the
+    /// filter. Takes effect immediately, without restarting anything.
+    pub fn set_settings(&mut self, settings: &VarioSettings) {
+        self.control.set_settings(settings);
+        self.filter.set_damping(settings.damping_s);
+        self.update_tone();
+    }
+
     /// See [`crate::Engine::set_test_climb`].
     pub fn set_test_climb(&mut self, climb_rate_mps: Option<f64>) {
         self.test_climb_mps = climb_rate_mps;
@@ -413,6 +421,26 @@ mod tests {
         let status = processor.status(8.0, true);
         assert!((status.accel.longest_gap_s - 3.02).abs() < 1e-6);
         assert!((status.pressure.longest_gap_s - 4.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn changed_settings_take_effect_while_running() {
+        let (mut processor, control) = processor();
+        climb_simulation(10.0).run_fast(|event| processor.handle(&event));
+        assert!(is_audible(&control), "climbing at 2 m/s beeps by default");
+
+        // Raise the climb threshold above the current climb rate: silence.
+        let mut settings = VarioSettings {
+            climb_threshold_mps: 3.0,
+            damping_s: 0.0,
+            ..VarioSettings::default()
+        };
+        processor.set_settings(&settings);
+        assert!(!is_audible(&control));
+
+        settings.climb_threshold_mps = 0.2;
+        processor.set_settings(&settings);
+        assert!(is_audible(&control));
     }
 
     #[test]

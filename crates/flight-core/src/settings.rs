@@ -37,6 +37,8 @@ pub enum SettingsError {
     DampingOutOfRange,
     #[error("settings must be finite numbers")]
     NotFinite,
+    #[error("line {line} of the settings file is not `name = number`")]
+    Malformed { line: usize },
 }
 
 impl VarioSettings {
@@ -64,9 +66,95 @@ impl VarioSettings {
     }
 }
 
+// The settings file is plain text, one `name = value` per line. That keeps this crate
+// free of a serialization dependency and the file readable and editable by hand.
+const KEY_CLIMB: &str = "climb_threshold_mps";
+const KEY_SINK: &str = "sink_threshold_mps";
+const KEY_VOLUME: &str = "volume";
+const KEY_DAMPING: &str = "damping_s";
+
+impl VarioSettings {
+    /// The settings as the text of a settings file. Read it back with
+    /// [`VarioSettings::from_text`].
+    pub fn to_text(&self) -> String {
+        format!(
+            "# Vario settings\n\
+             {KEY_CLIMB} = {}\n{KEY_SINK} = {}\n{KEY_VOLUME} = {}\n{KEY_DAMPING} = {}\n",
+            self.climb_threshold_mps, self.sink_threshold_mps, self.volume, self.damping_s
+        )
+    }
+
+    /// Parses the text of a settings file.
+    ///
+    /// Values missing from the text keep their defaults and unknown names are ignored,
+    /// so files written by older or newer versions of the app still load. The result
+    /// is validated.
+    pub fn from_text(text: &str) -> Result<Self, SettingsError> {
+        let mut settings = VarioSettings::default();
+        for (index, line) in text.lines().enumerate() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let malformed = SettingsError::Malformed { line: index + 1 };
+            let (key, value) = line.split_once('=').ok_or(malformed)?;
+            let value: f64 = value.trim().parse().map_err(|_| malformed)?;
+            match key.trim() {
+                KEY_CLIMB => settings.climb_threshold_mps = value,
+                KEY_SINK => settings.sink_threshold_mps = value,
+                KEY_VOLUME => settings.volume = value,
+                KEY_DAMPING => settings.damping_s = value,
+                _ => {}
+            }
+        }
+        settings.validate()?;
+        Ok(settings)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_round_trip_keeps_all_values() {
+        let settings = VarioSettings {
+            climb_threshold_mps: 0.35,
+            sink_threshold_mps: -3.1,
+            volume: 0.45,
+            damping_s: 1.25,
+        };
+        assert_eq!(VarioSettings::from_text(&settings.to_text()), Ok(settings));
+    }
+
+    #[test]
+    fn missing_and_unknown_entries_fall_back_to_defaults() {
+        let parsed = VarioSettings::from_text("volume = 0.3\nfuture_option = 7\n\n# note\n");
+        assert_eq!(
+            parsed,
+            Ok(VarioSettings {
+                volume: 0.3,
+                ..VarioSettings::default()
+            })
+        );
+        assert_eq!(VarioSettings::from_text(""), Ok(VarioSettings::default()));
+    }
+
+    #[test]
+    fn broken_text_is_an_error() {
+        assert_eq!(
+            VarioSettings::from_text("volume = 0.3\nnonsense\n"),
+            Err(SettingsError::Malformed { line: 2 })
+        );
+        assert_eq!(
+            VarioSettings::from_text("volume = loud"),
+            Err(SettingsError::Malformed { line: 1 })
+        );
+        assert_eq!(
+            VarioSettings::from_text("volume = 2"),
+            Err(SettingsError::VolumeOutOfRange)
+        );
+    }
 
     #[test]
     fn defaults_are_valid() {
