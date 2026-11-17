@@ -18,7 +18,7 @@ use serde::Serialize;
 
 use crate::settings::SettingsDto;
 use tauri::{AppHandle, Manager, State};
-use tauri_plugin_vario_sensors::{SensorStart, VarioSensorsExt};
+use tauri_plugin_vario_sensors::{Permissions, SensorStart, VarioSensorsExt};
 use vario_audio::voice::ToneControl;
 use vario_engine::flights::{self, FlightEntry};
 use vario_engine::{Engine, Status, TrackPoint};
@@ -127,6 +127,19 @@ async fn stop(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> 
     sensor_bridge::disconnect();
     drop(session);
     result
+}
+
+/// The permissions the app depends on. `async` because the plugin call must not run on
+/// the main thread, where Tauri runs synchronous commands.
+#[tauri::command]
+async fn permissions(app: AppHandle) -> Result<Permissions, String> {
+    app.vario_sensors().permissions()
+}
+
+/// Opens the app's page in the system settings, where the user can grant permissions.
+#[tauri::command]
+async fn open_settings(app: AppHandle) -> Result<(), String> {
+    app.vario_sensors().open_settings()
 }
 
 #[tauri::command]
@@ -257,6 +270,8 @@ pub fn run() {
             default_settings,
             get_map_style,
             set_map_style,
+            permissions,
+            open_settings,
             smoke::smoke_report
         ])
         .setup(|app| {

@@ -183,6 +183,72 @@ async function toggle() {
 
 $("toggle").addEventListener("click", toggle);
 
+// ---- Permissions ----
+//
+// Without the right permissions iOS silently delivers nothing (or only rough
+// positions), so problems are shown above the start button with a way to fix them.
+// They are checked every few seconds and whenever the app comes back to the
+// foreground, e.g. after the user changed them in the Settings app.
+
+/** Problems with the given permissions: [text, isHint]. Empty if all is fine. */
+function permissionProblems(p) {
+  const problems = [];
+  if (p.location === "denied" || p.location === "restricted") {
+    problems.push([
+      "Kein Standortzugriff: keine Position, keine Geschwindigkeit, keine Aufzeichnung. " +
+        "Unter Standort „Immer“ wählen.",
+      false,
+    ]);
+  } else if (p.location === "whenInUse") {
+    problems.push([
+      "Standort nur „Beim Verwenden der App“. Empfohlen ist „Immer“, damit die " +
+        "Aufzeichnung bei gesperrtem Bildschirm sicher weiterläuft.",
+      true,
+    ]);
+  }
+  if (p.location !== "denied" && p.location !== "restricted" && !p.preciseLocation) {
+    problems.push([
+      "„Genauer Standort“ ist aus: Positionen sind nur auf einige Kilometer genau. " +
+        "Unter Standort „Genauer Standort“ einschalten.",
+      false,
+    ]);
+  }
+  if (p.motion === "denied" || p.motion === "restricted") {
+    problems.push([
+      "„Bewegung & Fitness“ ist nicht erlaubt: ohne Barometer gibt es kein Vario. " +
+        "Unter „Bewegung & Fitness“ einschalten.",
+      false,
+    ]);
+  }
+  return problems;
+}
+
+async function checkPermissions() {
+  let problems = [];
+  try {
+    problems = permissionProblems(await invoke("permissions"));
+  } catch (error) {
+    console.warn("permissions", error);
+  }
+  const list = $("permission-problems");
+  list.replaceChildren(
+    ...problems.map(([text, isHint]) => {
+      const item = document.createElement("li");
+      item.textContent = text;
+      if (isHint) item.className = "hint";
+      return item;
+    }),
+  );
+  $("permissions").hidden = problems.length === 0;
+}
+
+$("open-settings").addEventListener("click", () => {
+  invoke("open_settings").catch((error) => console.warn("open_settings", error));
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) checkPermissions();
+});
+
 // ---- Recorded flights ----
 
 const dateFormat = new Intl.DateTimeFormat("de-DE", {
@@ -402,6 +468,9 @@ async function init() {
   const style = await invoke("get_map_style");
   $("set-map-style").value = style;
   FlightMap.setStyle(style);
+  checkPermissions();
+  // Also catches the answers to the permission dialogs iOS shows on the first start.
+  setInterval(checkPermissions, 5000);
   setInterval(pollStatus, 200);
   setInterval(pollTrack, 1000);
 }

@@ -52,6 +52,8 @@ pub fn maybe_run(app: &AppHandle) {
             "window.__TAURI__.core.invoke('smoke_report', { text: \
              [...document.querySelectorAll('.page')].map((page) => page.innerText).join('\\n') + \
              '\\ntrack points: ' + FlightMap.trackLength() + \
+             '\\npermission warnings: ' + \
+             document.querySelectorAll('#permission-problems li').length + \
              '\\nscript errors: ' + JSON.stringify(window.scriptErrors) })",
         );
         // If the page never answers, it is broken: fail instead of hanging.

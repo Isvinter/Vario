@@ -195,6 +195,25 @@ body {
 #recording.bad {
   color: var(--sink);
 }
+#permissions {
+  margin-bottom: 12px;
+  padding: 8px 12px 12px;
+  border: 3px solid var(--sink);
+  font-size: 15px;
+}
+#permissions ul {
+  margin: 0 0 8px;
+  padding-left: 1.2em;
+}
+#permissions li {
+  margin-top: 4px;
+}
+#permissions li.hint {
+  color: var(--muted);
+}
+#permissions .button {
+  width: 100%;
+}
 #info {
   margin-top: 2px;
   min-height: 1.4em;

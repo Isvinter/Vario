@@ -306,6 +306,40 @@ final class SensorBridge: NSObject, CLLocationManagerDelegate {
   }
 }
 
+// MARK: - Permissions
+
+/// The permissions the app depends on, in the words of the Rust side
+/// (`Permissions` in the plugin's `src/lib.rs`). Must be called on the main thread.
+private func currentPermissions() -> JSObject {
+  // Reading the status needs no running location updates; a fresh manager will do.
+  let manager = CLLocationManager()
+  let location: String
+  switch manager.authorizationStatus {
+  case .authorizedAlways: location = "always"
+  case .authorizedWhenInUse: location = "whenInUse"
+  case .denied: location = "denied"
+  case .restricted: location = "restricted"
+  case .notDetermined: location = "notDetermined"
+  @unknown default: location = "unknown"
+  }
+  // The barometer needs "Motion & Fitness"; acceleration does not.
+  let motion: String
+  switch CMAltimeter.authorizationStatus() {
+  case .authorized: motion = "authorized"
+  case .denied: motion = "denied"
+  case .restricted: motion = "restricted"
+  case .notDetermined: motion = "notDetermined"
+  @unknown default: motion = "unknown"
+  }
+  return [
+    "native": true,
+    "location": location,
+    // With "precise location" off, iOS rounds positions to a few kilometres.
+    "preciseLocation": manager.accuracyAuthorization == .fullAccuracy,
+    "motion": motion,
+  ]
+}
+
 // MARK: - Tauri plugin
 
 class VarioSensorsPlugin: Plugin {
@@ -318,6 +352,22 @@ class VarioSensorsPlugin: Plugin {
         self.bridge = SensorBridge()
       }
       invoke.resolve(self.bridge!.start())
+    }
+  }
+
+  @objc public func permissions(_ invoke: Invoke) {
+    DispatchQueue.main.async {
+      invoke.resolve(currentPermissions())
+    }
+  }
+
+  /// Opens this app's page in the iOS Settings app.
+  @objc public func openSettings(_ invoke: Invoke) {
+    DispatchQueue.main.async {
+      if let url = URL(string: UIApplication.openSettingsURLString) {
+        UIApplication.shared.open(url)
+      }
+      invoke.resolve()
     }
   }
 
