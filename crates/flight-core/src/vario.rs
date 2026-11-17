@@ -80,24 +80,48 @@ const BIAS: usize = 2;
 
 type Matrix = [[f64; 3]; 3];
 
+/// How many acceleration samples the filter keeps to replay after a late pressure
+/// sample: about 10 s at 50 Hz. A pressure sample measured before the oldest kept sample
+/// is applied at that sample's time instead of its own.
+const ACCEL_HISTORY: usize = 512;
+
 #[derive(Debug, Clone)]
 pub struct VarioFilter {
     config: VarioFilterConfig,
     damping_s: f64,
     /// `None` until the first pressure sample arrives.
     running: Option<Running>,
-    last_accel: Option<AccelSample>,
+    /// Acceleration samples newer than `running.lagged`, oldest first. Also filled
+    /// before the filter runs, so the first estimate can catch up with them.
+    history: AccelHistory,
+}
+
+/// # Late pressure samples
+///
+/// A barometer sample can arrive seconds after it was measured (on the iPhone about
+/// 2.7 s), long after acceleration samples measured later. Comparing it with the current
+/// altitude would compare the altitude of then with the altitude of now, and the vario
+/// would lag behind.
+///
+/// So the filter keeps two estimates: `lagged`, which contains all pressure samples and
+/// stands at the time of the latest one, and `current`, which is `lagged` moved forward
+/// with the acceleration samples received since. A pressure sample updates `lagged` at
+/// its own measurement time; `current` is then recomputed from the stored acceleration.
+#[derive(Debug, Clone)]
+struct Running {
+    lagged: Estimate,
+    current: Estimate,
+    damped_climb_rate: f64,
 }
 
 #[derive(Debug, Clone)]
-struct Running {
+struct Estimate {
     time: Timestamp,
     /// Altitude (m), climb rate (m/s), accelerometer bias (m/s²).
     state: [f64; 3],
     /// Covariance matrix: the uncertainty of the state and how the errors of its three
     /// components are related.
     covariance: Matrix,
-    damped_climb_rate: f64,
 }
 
 impl VarioFilter {
@@ -106,7 +130,7 @@ impl VarioFilter {
             config,
             damping_s: 0.0,
             running: None,
-            last_accel: None,
+            history: AccelHistory::new(),
         }
     }
 
@@ -125,101 +149,155 @@ impl VarioFilter {
     }
 
     pub fn on_accel(&mut self, sample: AccelSample) {
-        self.last_accel = Some(sample);
-        self.predict(sample.time);
+        let newest = match &self.running {
+            Some(running) => Some(running.current.time),
+            None => self.history.newest().map(|newest| newest.time),
+        };
+        if let Some(newest) = newest {
+            let dt = sample.time.seconds_since(newest);
+            if dt <= 0.0 {
+                // Late or duplicate sample: the estimate is already at or past this time.
+                return;
+            }
+            if dt > self.config.reset_gap_s {
+                self.running = None;
+                self.history.clear();
+            }
+        }
+
+        if let Some(oldest) = self.history.push(sample)
+            && let Some(running) = &mut self.running
+        {
+            // History full: the lagged estimate must take over the dropped sample.
+            running
+                .lagged
+                .predict(oldest.time, Some(oldest), &self.config);
+        }
+
+        if let Some(running) = &mut self.running {
+            let dt = sample.time.seconds_since(running.current.time);
+            running
+                .current
+                .predict(sample.time, Some(sample), &self.config);
+            running.apply_damping(dt, self.damping_s);
+        }
     }
 
     pub fn on_pressure(&mut self, sample: PressureSample) {
         let measured_altitude = pressure_to_altitude(sample.pressure_pa);
         let variance = self.config.altitude_noise_m.powi(2);
 
-        self.predict(sample.time);
+        if self.running.as_ref().is_some_and(|running| {
+            sample.time.seconds_since(running.current.time) > self.config.reset_gap_s
+        }) {
+            self.running = None;
+            self.history.clear();
+        }
 
-        // `let ... else` handles the "not running yet" case and leaves the happy path
-        // unindented.
-        let Some(running) = &mut self.running else {
-            self.running = Some(Running {
-                time: sample.time,
-                state: [measured_altitude, 0.0, 0.0],
-                // Altitude known as well as the barometer allows; climb rate within
-                // about 2 m/s; bias within about 0.5 m/s².
-                covariance: [[variance, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 0.25]],
-                damped_climb_rate: 0.0,
-            });
-            return;
+        // Move the lagged estimate to the time of the sample, using the acceleration
+        // measured up to then.
+        let mut last_used = None;
+        while let Some(oldest) = self.history.oldest()
+            && oldest.time <= sample.time
+        {
+            self.history.pop_oldest();
+            if let Some(running) = &mut self.running {
+                running
+                    .lagged
+                    .predict(oldest.time, Some(oldest), &self.config);
+            }
+            last_used = Some(oldest);
+        }
+
+        let (lagged, damped_climb_rate) = match self.running.take() {
+            None => (
+                Estimate {
+                    time: sample.time,
+                    state: [measured_altitude, 0.0, 0.0],
+                    // Altitude known as well as the barometer allows; climb rate within
+                    // about 2 m/s; bias within about 0.5 m/s².
+                    covariance: [[variance, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 0.25]],
+                },
+                None,
+            ),
+            Some(running) => {
+                let mut lagged = running.lagged;
+                let accel = last_used.filter(|accel| {
+                    sample.time.seconds_since(accel.time) <= self.config.accel_timeout_s
+                });
+                lagged.predict(sample.time, accel, &self.config);
+                lagged.update_altitude(measured_altitude, variance);
+                (lagged, Some(running.damped_climb_rate))
+            }
         };
 
-        // Update step for a measurement of the altitude component alone.
-        let p = &mut running.covariance;
-        let innovation = measured_altitude - running.state[ALT];
-        let innovation_variance = p[ALT][ALT] + variance;
-        // The gain says how much of the innovation each state component takes over.
-        let gain = [
-            p[ALT][ALT] / innovation_variance,
-            p[VEL][ALT] / innovation_variance,
-            p[BIAS][ALT] / innovation_variance,
-        ];
-        for i in 0..3 {
-            running.state[i] += gain[i] * innovation;
+        // Recompute the current estimate from the lagged one and the acceleration
+        // measured after the sample.
+        let mut current = lagged.clone();
+        for accel in self.history.iter() {
+            current.predict(accel.time, Some(accel), &self.config);
         }
-        let altitude_row = p[ALT];
-        for i in 0..3 {
-            for j in 0..3 {
-                p[i][j] -= gain[i] * altitude_row[j];
-            }
-        }
-        symmetrize(p);
-
-        // Without damping the output must follow the corrected state at once. With
-        // damping, the correction is blended in by the following predict steps.
-        if self.damping_s == 0.0 {
-            running.damped_climb_rate = running.state[VEL];
-        }
+        let damped_climb_rate = match damped_climb_rate {
+            // Without damping the output must follow the corrected state at once. With
+            // damping, the correction is blended in by the following predict steps.
+            Some(damped) if self.damping_s > 0.0 => damped,
+            Some(_) => current.state[VEL],
+            None => 0.0,
+        };
+        self.running = Some(Running {
+            lagged,
+            current,
+            damped_climb_rate,
+        });
     }
 
     /// The current estimate, or `None` before the first pressure sample.
     pub fn reading(&self) -> Option<VarioReading> {
         self.running.as_ref().map(|running| VarioReading {
-            time: running.time,
-            altitude_m: running.state[ALT],
+            time: running.current.time,
+            altitude_m: running.current.state[ALT],
             climb_rate_mps: running.damped_climb_rate,
-            raw_climb_rate_mps: running.state[VEL],
+            raw_climb_rate_mps: running.current.state[VEL],
         })
     }
 
     /// The estimated accelerometer bias in m/s², for diagnostics.
     pub fn accel_bias_mps2(&self) -> Option<f64> {
-        self.running.as_ref().map(|running| running.state[BIAS])
+        self.running
+            .as_ref()
+            .map(|running| running.current.state[BIAS])
     }
+}
 
-    /// Moves the estimate forward to `time`.
-    fn predict(&mut self, time: Timestamp) {
-        let Some(running) = &mut self.running else {
-            return;
+impl Running {
+    /// Damping: exponential moving average with time constant `damping_s`.
+    fn apply_damping(&mut self, dt: f64, damping_s: f64) {
+        let weight = if damping_s > 0.0 {
+            1.0 - (-dt / damping_s).exp()
+        } else {
+            1.0
         };
-        let dt = time.seconds_since(running.time);
+        self.damped_climb_rate += weight * (self.current.state[VEL] - self.damped_climb_rate);
+    }
+}
+
+impl Estimate {
+    /// Moves the estimate forward to `time`. `accel` is the acceleration measured over
+    /// the step; without it the filter "coasts": it assumes no acceleration, but with a
+    /// large uncertainty.
+    fn predict(&mut self, time: Timestamp, accel: Option<AccelSample>, config: &VarioFilterConfig) {
+        let dt = time.seconds_since(self.time);
         if dt <= 0.0 {
-            // Late or duplicate sample: the state is already at or past this time.
             return;
         }
-        if dt > self.config.reset_gap_s {
-            self.running = None;
-            return;
-        }
-
-        // Use the latest acceleration if it is recent enough. Otherwise "coast":
-        // assume no acceleration, but with a large uncertainty.
-        let accel = self
-            .last_accel
-            .filter(|sample| time.seconds_since(sample.time) <= self.config.accel_timeout_s);
         let (measured_accel, noise_density, use_bias) = match accel {
-            Some(sample) => (sample.vertical_mps2, self.config.accel_noise_density, 1.0),
-            None => (0.0, self.config.coasting_noise_density, 0.0),
+            Some(sample) => (sample.vertical_mps2, config.accel_noise_density, 1.0),
+            None => (0.0, config.coasting_noise_density, 0.0),
         };
 
-        let [altitude, velocity, bias] = running.state;
+        let [altitude, velocity, bias] = self.state;
         let net_accel = measured_accel - use_bias * bias;
-        running.state = [
+        self.state = [
             altitude + velocity * dt + 0.5 * net_accel * dt * dt,
             velocity + net_accel * dt,
             bias,
@@ -232,7 +310,7 @@ impl VarioFilter {
             [0.0, 1.0, -use_bias * dt],
             [0.0, 0.0, 1.0],
         ];
-        let mut p = multiply(&multiply(&f, &running.covariance), &transpose(&f));
+        let mut p = multiply(&multiply(&f, &self.covariance), &transpose(&f));
 
         // Process noise: uncertainty added during the step by acceleration the sensor
         // did not capture (continuous white-noise acceleration model).
@@ -241,17 +319,92 @@ impl VarioFilter {
         p[ALT][VEL] += q * dt * dt / 2.0;
         p[VEL][ALT] += q * dt * dt / 2.0;
         p[VEL][VEL] += q * dt;
-        p[BIAS][BIAS] += self.config.bias_walk * self.config.bias_walk * dt;
-        running.covariance = p;
+        p[BIAS][BIAS] += config.bias_walk * config.bias_walk * dt;
+        self.covariance = p;
+        self.time = time;
+    }
 
-        // Damping: exponential moving average with time constant `damping_s`.
-        let weight = if self.damping_s > 0.0 {
-            1.0 - (-dt / self.damping_s).exp()
-        } else {
-            1.0
+    /// Update step for a measurement of the altitude component alone.
+    fn update_altitude(&mut self, measured_altitude: f64, variance: f64) {
+        let p = &mut self.covariance;
+        let innovation = measured_altitude - self.state[ALT];
+        let innovation_variance = p[ALT][ALT] + variance;
+        // The gain says how much of the innovation each state component takes over.
+        let gain = [
+            p[ALT][ALT] / innovation_variance,
+            p[VEL][ALT] / innovation_variance,
+            p[BIAS][ALT] / innovation_variance,
+        ];
+        for i in 0..3 {
+            self.state[i] += gain[i] * innovation;
+        }
+        let altitude_row = p[ALT];
+        for i in 0..3 {
+            for j in 0..3 {
+                p[i][j] -= gain[i] * altitude_row[j];
+            }
+        }
+        symmetrize(p);
+    }
+}
+
+/// A ring buffer of the latest acceleration samples with a fixed capacity, so adding a
+/// sample never allocates: when it is full, the oldest sample makes room.
+#[derive(Debug, Clone)]
+struct AccelHistory {
+    samples: [AccelSample; ACCEL_HISTORY],
+    /// Index of the oldest sample.
+    start: usize,
+    len: usize,
+}
+
+impl AccelHistory {
+    fn new() -> Self {
+        let empty = AccelSample {
+            time: Timestamp::from_secs(0.0),
+            vertical_mps2: 0.0,
         };
-        running.damped_climb_rate += weight * (running.state[VEL] - running.damped_climb_rate);
-        running.time = time;
+        AccelHistory {
+            samples: [empty; ACCEL_HISTORY],
+            start: 0,
+            len: 0,
+        }
+    }
+
+    fn clear(&mut self) {
+        self.len = 0;
+    }
+
+    /// Adds a sample; returns the oldest one if it had to make room.
+    fn push(&mut self, sample: AccelSample) -> Option<AccelSample> {
+        let dropped = if self.len == ACCEL_HISTORY {
+            self.pop_oldest()
+        } else {
+            None
+        };
+        self.samples[(self.start + self.len) % ACCEL_HISTORY] = sample;
+        self.len += 1;
+        dropped
+    }
+
+    fn oldest(&self) -> Option<AccelSample> {
+        (self.len > 0).then(|| self.samples[self.start])
+    }
+
+    fn newest(&self) -> Option<AccelSample> {
+        (self.len > 0).then(|| self.samples[(self.start + self.len - 1) % ACCEL_HISTORY])
+    }
+
+    fn pop_oldest(&mut self) -> Option<AccelSample> {
+        let oldest = self.oldest()?;
+        self.start = (self.start + 1) % ACCEL_HISTORY;
+        self.len -= 1;
+        Some(oldest)
+    }
+
+    /// The samples from oldest to newest.
+    fn iter(&self) -> impl Iterator<Item = AccelSample> + '_ {
+        (0..self.len).map(|i| self.samples[(self.start + i) % ACCEL_HISTORY])
     }
 }
 
@@ -413,6 +566,92 @@ mod tests {
         filter.on_pressure(pressure(5.0, 1000.0));
         filter.on_accel(accel(4.0, 3.0));
         assert_eq!(filter.reading().unwrap().time, Timestamp::from_secs(5.0));
+    }
+
+    /// Sensor events of a flight that starts climbing at 10 s: acceleration at 50 Hz,
+    /// pressure at about 0.94 Hz, delivered `pressure_delay_s` after measurement (on the
+    /// iPhone about 2.7 s). Sorted by arrival.
+    fn climb_entry(pressure_delay_s: f64) -> Vec<SensorEvent> {
+        // Vertical acceleration 1 m/s² from 10 s to 12 s, then a steady 2 m/s climb.
+        let accel_at = |t: f64| if (10.0..12.0).contains(&t) { 1.0 } else { 0.0 };
+        let altitude_at = |t: f64| {
+            let accelerating = (t - 10.0).clamp(0.0, 2.0);
+            1000.0 + 0.5 * accelerating * accelerating + 2.0 * (t - 12.0).max(0.0)
+        };
+        let mut events: Vec<(f64, SensorEvent)> = Vec::new();
+        for step in 0..=(20 * 50) {
+            let t = f64::from(step) / 50.0;
+            events.push((t, SensorEvent::Accel(accel(t, accel_at(t)))));
+        }
+        let mut t = 0.3;
+        while t < 20.0 {
+            events.push((
+                t + pressure_delay_s,
+                SensorEvent::Pressure(pressure(t, altitude_at(t))),
+            ));
+            t += 1.066;
+        }
+        // Stable sort: at equal arrival times the acceleration comes first.
+        events.sort_by(|a, b| a.0.total_cmp(&b.0));
+        events.into_iter().map(|(_, event)| event).collect()
+    }
+
+    #[test]
+    fn late_pressure_samples_are_applied_at_their_measurement_time() {
+        let mut timely = VarioFilter::default();
+        let mut late = VarioFilter::default();
+        let timely_events = climb_entry(0.0);
+        let late_events = climb_entry(2.7);
+
+        // Compare the readings whenever both filters have seen the same acceleration.
+        let mut timely_readings = Vec::new();
+        for event in &timely_events {
+            timely.handle(event);
+            if let (SensorEvent::Accel(_), Some(reading)) = (event, timely.reading()) {
+                timely_readings.push(reading);
+            }
+        }
+        let mut worst: f64 = 0.0;
+        for event in &late_events {
+            late.handle(event);
+            let (SensorEvent::Accel(sample), Some(reading)) = (event, late.reading()) else {
+                continue;
+            };
+            let Some(reference) = timely_readings.iter().find(|r| r.time == sample.time) else {
+                continue;
+            };
+            if sample.time.as_secs() > 4.0 {
+                worst =
+                    worst.max((reading.raw_climb_rate_mps - reference.raw_climb_rate_mps).abs());
+            }
+        }
+        // Small differences remain: the late filter has not seen the newest 2.7 s of
+        // pressure, only the acceleration.
+        assert!(worst < 0.15, "largest climb rate difference {worst} m/s");
+
+        let (a, b) = (timely.reading().unwrap(), late.reading().unwrap());
+        assert!(
+            (a.raw_climb_rate_mps - b.raw_climb_rate_mps).abs() < 1e-6,
+            "{a:?} {b:?}"
+        );
+        assert!((a.altitude_m - b.altitude_m).abs() < 1e-6, "{a:?} {b:?}");
+        assert!((b.raw_climb_rate_mps - 2.0).abs() < 0.1, "{b:?}");
+    }
+
+    #[test]
+    fn a_full_history_does_not_lose_the_lagged_estimate() {
+        let mut filter = VarioFilter::default();
+        filter.on_pressure(pressure(0.0, 1000.0));
+        // 30 s of acceleration (more than the history holds) before the next pressure.
+        for step in 1..=(30 * 50) {
+            filter.on_accel(accel(f64::from(step) / 50.0, 0.0));
+        }
+        filter.on_pressure(pressure(1.0, 1000.0));
+        filter.on_pressure(pressure(29.0, 1000.0));
+        let reading = filter.reading().unwrap();
+        assert_eq!(reading.time, Timestamp::from_secs(30.0));
+        assert!(reading.raw_climb_rate_mps.abs() < 0.1, "{reading:?}");
+        assert!((reading.altitude_m - 1000.0).abs() < 0.5, "{reading:?}");
     }
 
     #[test]
