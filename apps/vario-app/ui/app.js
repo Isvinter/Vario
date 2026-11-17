@@ -169,6 +169,7 @@ async function toggle() {
       const info = await invoke("start");
       FlightMap.clearTrack();
       setRunning(true);
+      $("interrupted").hidden = true;
       const s = info.sensors;
       $("info").textContent = s.native
         ? `Barometer: ${s.altimeter ? "ja" : "NEIN"} · Bewegung: ${s.motion ? "ja" : "NEIN"} · ` +
@@ -248,6 +249,47 @@ $("open-settings").addEventListener("click", () => {
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) checkPermissions();
 });
+
+// ---- Interrupted recording ----
+//
+// If the app ended without "Stop" (killed by iOS, crash, empty battery), the flight is
+// saved up to the last few seconds. Say so once, so a cut-off flight is no surprise.
+
+const timeFormat = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
+
+async function checkInterrupted() {
+  let session = null;
+  try {
+    session = await invoke("interrupted_session");
+  } catch (error) {
+    console.warn("interrupted_session", error);
+  }
+  if (!session) return;
+  let text =
+    "Die letzte Aufzeichnung wurde unerwartet beendet (z. B. von iOS beendet, " +
+    "Absturz oder Akku leer). ";
+  const summary = session.flight?.summary;
+  if (summary?.startUtc) {
+    const start = new Date(summary.startUtc);
+    const end = new Date(start.getTime() + summary.durationS * 1000);
+    text +=
+      `Der Flug vom ${dateFormat.format(start)} ist bis ${timeFormat.format(end)} Uhr ` +
+      "gespeichert und steht in der Flugliste.";
+  } else if (session.flight) {
+    text += `Der Flug ist gespeichert: ${session.flight.fileName}.`;
+  } else {
+    text += "Es wurde keine Position aufgezeichnet.";
+  }
+  $("interrupted-text").textContent = text;
+  $("interrupted").hidden = false;
+}
+
+function hideInterrupted() {
+  $("interrupted").hidden = true;
+  invoke("dismiss_interrupted_session").catch((error) => console.warn(error));
+}
+
+$("dismiss-interrupted").addEventListener("click", hideInterrupted);
 
 // ---- Recorded flights ----
 
@@ -469,6 +511,7 @@ async function init() {
   $("set-map-style").value = style;
   FlightMap.setStyle(style);
   checkPermissions();
+  checkInterrupted();
   // Also catches the answers to the permission dialogs iOS shows on the first start.
   setInterval(checkPermissions, 5000);
   setInterval(pollStatus, 200);

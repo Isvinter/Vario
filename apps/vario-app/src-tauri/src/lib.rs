@@ -5,6 +5,7 @@
 //! On the desktop the sensors are replaced by a simulated flight.
 
 mod audio;
+mod session_marker;
 mod settings;
 #[cfg(desktop)]
 mod sim;
@@ -41,6 +42,9 @@ struct AppState {
     session: Mutex<Option<Session>>,
     /// The current settings; loaded from the settings file when the app starts.
     settings: Mutex<VarioSettings>,
+    /// Start (Unix time) of the last session if it ended without "Stop"; shown to the
+    /// user once.
+    interrupted: Mutex<Option<i64>>,
 }
 
 impl AppState {
@@ -52,6 +56,12 @@ impl AppState {
 
     fn settings(&self) -> std::sync::MutexGuard<'_, VarioSettings> {
         self.settings
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn interrupted(&self) -> std::sync::MutexGuard<'_, Option<i64>> {
+        self.interrupted
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
@@ -105,6 +115,8 @@ async fn start(app: AppHandle, state: State<'_, AppState>) -> Result<StartInfo, 
     .map_err(|error| format!("could not start: {error}"))
     .inspect_err(|_| sensor_bridge::disconnect())?;
 
+    session_marker::create(&app);
+    *state.interrupted() = None;
     *state.session() = Some(Session {
         engine,
         _audio: audio,
@@ -126,7 +138,34 @@ async fn stop(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> 
     let result = app.vario_sensors().stop();
     sensor_bridge::disconnect();
     drop(session);
+    session_marker::remove(&app);
     result
+}
+
+/// The last session, if it ended without "Stop" (see [`session_marker`]).
+#[tauri::command]
+async fn interrupted_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<session_marker::InterruptedSession>, String> {
+    let Some(started) = *state.interrupted() else {
+        return Ok(None);
+    };
+    let mut flights = Vec::new();
+    if let Some(dir) = flights_dir(&app) {
+        for flight in flights::list(&dir).map_err(|error| error.to_string())? {
+            if let Some(modified) = session_marker::modified_unix(&dir.join(&flight.file_name)) {
+                flights.push((flight, modified));
+            }
+        }
+    }
+    Ok(Some(session_marker::describe(started, &flights)))
+}
+
+/// The user has seen the notice about the interrupted session.
+#[tauri::command]
+fn dismiss_interrupted_session(state: State<'_, AppState>) {
+    *state.interrupted() = None;
 }
 
 /// The permissions the app depends on. `async` because the plugin call must not run on
@@ -272,13 +311,43 @@ pub fn run() {
             set_map_style,
             permissions,
             open_settings,
+            interrupted_session,
+            dismiss_interrupted_session,
             smoke::smoke_report
         ])
         .setup(|app| {
             *app.state::<AppState>().settings() = settings::load(app.handle());
+            *app.state::<AppState>().interrupted() = session_marker::take_interrupted(app.handle());
             smoke::maybe_run(app.handle());
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running the app");
+        .build(tauri::generate_context!())
+        .expect("error while building the app")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                end_session_on_exit(app);
+            }
+        });
+}
+
+/// The app is about to end without the user having pressed "Stop": the window was
+/// closed, or iOS terminates the app (e.g. swiped away in the app switcher, also while
+/// running in the background). Ends the session like "Stop" does, so the flight file
+/// and the logs get their last seconds; otherwise up to one save interval (10 s) of
+/// track would be lost.
+///
+/// Runs on the main thread, so the native sensors are not stopped through the plugin
+/// (that call waits for the main thread); the process ends right after anyway. If iOS
+/// kills the app outright (low memory, crash, empty battery), nothing runs here and
+/// the files keep the state of their last save.
+fn end_session_on_exit(app: &AppHandle) {
+    let session = app.state::<AppState>().session().take();
+    if session.is_some() {
+        sensor_bridge::disconnect();
+        // Dropping stops the engine thread, which saves the flight and flushes the logs
+        // before it ends; `drop` waits for that.
+        drop(session);
+        session_marker::remove(app);
+        eprintln!("session ended on exit, flight saved");
+    }
 }
