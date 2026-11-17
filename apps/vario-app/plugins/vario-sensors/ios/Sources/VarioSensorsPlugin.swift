@@ -6,8 +6,8 @@
 // is locked (given the background modes "audio" and "location" in Info.plist).
 //
 // NOTE: tested on an iPhone 13 Pro Max (iOS 27.2): motion, barometer and GPS deliver
-// without gaps with the screen locked, also outdoors and during a phone call. Resuming
-// the tone after an audio interruption is not yet tested on the device.
+// without gaps with the screen locked, also outdoors and during a phone call. The tone
+// comes back after an alarm with the screen locked.
 
 import AVFoundation
 import CoreLocation
@@ -104,10 +104,16 @@ final class SensorBridge: NSObject, CLLocationManagerDelegate {
 
   /// Category "playback": sound plays with the silent switch on and may continue in
   /// the background. Must be active before Rust opens the audio output.
+  ///
+  /// "mixWithOthers": the tone plays along with other apps (music, navigation) instead
+  /// of stopping them. This is also what lets the tone come back after a phone call or
+  /// an alarm with the screen locked: iOS refuses to activate a session that would stop
+  /// others while the app is in the background ("can't stop others because it is in the
+  /// background and not the NowPlaying app", seen on the device).
   private func configureAudioSession() -> String {
     let session = AVAudioSession.sharedInstance()
     do {
-      try session.setCategory(.playback, mode: .default, options: [])
+      try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
       // Short buffers keep the delay between climb rate and tone small.
       try session.setPreferredIOBufferDuration(0.005)
       try session.setActive(true)

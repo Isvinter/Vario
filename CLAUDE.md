@@ -153,4 +153,6 @@ die Shell von Claude Code unter Rosetta; die Toolchain ist trotzdem nativ arm64
   also nicht für Wettbewerbe/Rekorde gedacht.
 - Einheiten intern SI (m, m/s, Pa, s); Umrechnung nur in der Anzeige.
 - iOS später: Standortberechtigung „Immer“, Background-Modes `location` und `audio`,
-  Audio-Session-Kategorie `playback` (Ton trotz Stummschalter).
+  Audio-Session-Kategorie `playback` (Ton trotz Stummschalter) mit `mixWithOthers`: Der Ton
+  mischt sich mit anderen Apps; nur so darf iOS ihn nach einem Anruf im Hintergrund
+  wieder starten.

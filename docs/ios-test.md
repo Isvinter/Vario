@@ -42,12 +42,19 @@ mit dem Fahrrad in der Stadt und zu Fuß, nicht im Flug. Ausgewertet aus den Roh
 - Rauschen der Druckhöhe: etwa 4 cm bei ruhigem Wetter, etwa 30 cm (Ausreißer bis 3 m)
   bei Sturm zwischen Gebäuden.
 - **Anruf:** Danach kam der Ton nicht zurück. Sensoren, Filter und Aufzeichnung liefen
-  weiter. Ursache: Die App reagiert noch nicht auf Unterbrechungen der Audio-Session.
+  weiter. Ursache: Die App reagierte noch nicht auf Unterbrechungen der Audio-Session.
+  **Behoben in Phase 5** (`e0e4f24` und Folge-Commit): Die App aktiviert die Session nach
+  einer Unterbrechung wieder und öffnet die Tonausgabe neu. Im Hintergrund klappte das
+  erst mit der Option `mixWithOthers`; ohne sie lehnte iOS ab („can't stop others
+  because it is in the background and not the NowPlaying app“, im Gerätelog). Auf dem
+  iPhone mit Wecker bei gesperrtem Bildschirm geprüft: Der Wecker schaltet den Vario-Ton
+  ganz stumm, nach dem Stoppen ist er sofort wieder da. Ob ein Anruf sich genauso
+  verhält, ist nach der Korrektur nicht eigens geprüft.
 - **Akku:** Die Anzeige stand vor und nach einem 13-Minuten-Lauf auf 100 %; für eine
   Aussage braucht es einen längeren Lauf.
 
-**Noch offen:** Akkuverbrauch über eine Stunde und mehr, Ton nach einem Anruf (nach der
-Korrektur), Vario-Gefühl bei echtem Höhenunterschied im Flug.
+**Noch offen:** Akkuverbrauch über eine Stunde und mehr, Ton nach einem echten Anruf
+(nach der Korrektur), Vario-Gefühl bei echtem Höhenunterschied im Flug.
 
 **Bewertung:** Tauri trägt für den Hintergrundbetrieb, die Oberfläche kann wie geplant
 mit Tauri gebaut werden.
