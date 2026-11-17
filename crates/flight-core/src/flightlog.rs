@@ -19,9 +19,10 @@ pub struct FlightSummary {
     pub start_altitude_m: i32,
     /// Highest altitude in metres.
     pub max_altitude_m: i32,
-    /// Length of the flown path over ground in metres.
+    /// Length of the flown path over ground in metres, from fixes with a 3D fix only.
     pub track_length_m: f64,
-    /// Straight distance from the first to the last fix in metres.
+    /// Straight distance from the first to the last fix in metres, from fixes with a 3D
+    /// fix only.
     pub distance_m: f64,
 }
 
@@ -37,6 +38,11 @@ pub fn display_altitude_m(fix: &IgcFix) -> i32 {
 }
 
 /// Summarizes a flight. `None` if the file contains no fixes.
+///
+/// Distances use only fixes with a 3D fix. Without one (indoors, between buildings),
+/// iOS still reports positions, but they can be hundreds of metres off and jump around,
+/// which would add kilometres of path that were never flown. If a file has no 3D fix at
+/// all, all fixes are used.
 pub fn summarize(file: &IgcFile) -> Option<FlightSummary> {
     let mut fixes = file.fixes();
     let first = fixes.next()?;
@@ -62,21 +68,29 @@ pub fn summarize(file: &IgcFile) -> Option<FlightSummary> {
         summary.duration_s += step;
         summary.fix_count += 1;
         summary.max_altitude_m = summary.max_altitude_m.max(display_altitude_m(fix));
-        summary.track_length_m += distance_m(
-            previous.latitude_deg,
-            previous.longitude_deg,
-            fix.latitude_deg,
-            fix.longitude_deg,
-        );
         previous = fix;
     }
-    summary.distance_m = distance_m(
-        first.latitude_deg,
-        first.longitude_deg,
-        previous.latitude_deg,
-        previous.longitude_deg,
-    );
+
+    let any_3d = file.fixes().any(|fix| fix.fix_3d);
+    let mut positions = file.fixes().filter(|fix| fix.fix_3d || !any_3d);
+    if let Some(first_position) = positions.next() {
+        let mut previous = first_position;
+        for fix in positions {
+            summary.track_length_m += distance(previous, fix);
+            previous = fix;
+        }
+        summary.distance_m = distance(first_position, previous);
+    }
     Some(summary)
+}
+
+fn distance(a: &IgcFix, b: &IgcFix) -> f64 {
+    distance_m(
+        a.latitude_deg,
+        a.longitude_deg,
+        b.latitude_deg,
+        b.longitude_deg,
+    )
 }
 
 /// File name for a flight that started at `start`, e.g. `2026-07-28-101502.igc`.
@@ -156,6 +170,37 @@ mod tests {
         let summary = summarize(&file(vec![low_quality])).unwrap();
         assert_eq!(summary.max_altitude_m, 1234);
         assert_eq!(summary.duration_s, 0);
+    }
+
+    #[test]
+    fn distances_skip_fixes_without_a_3d_fix() {
+        let north = 47.0 + 1.0 / 60.0;
+        // Indoors: a coarse position a nautical mile away, without a 3D fix.
+        let mut coarse = fix(10, 0, 30, north, 0);
+        coarse.fix_3d = false;
+        let summary = summarize(&file(vec![
+            fix(10, 0, 0, 47.0, 500),
+            coarse,
+            fix(10, 1, 0, 47.0, 500),
+        ]))
+        .unwrap();
+        assert_eq!(summary.fix_count, 3);
+        assert!(summary.track_length_m < 1.0, "{summary:?}");
+    }
+
+    #[test]
+    fn distances_use_all_fixes_if_none_has_a_3d_fix() {
+        let north = 47.0 + 1.0 / 60.0;
+        let mut fixes = vec![fix(10, 0, 0, 47.0, 0), fix(10, 1, 0, north, 0)];
+        for fix in &mut fixes {
+            fix.fix_3d = false;
+        }
+        let summary = summarize(&file(fixes)).unwrap();
+        assert!(
+            (summary.track_length_m - 1852.0).abs() < 10.0,
+            "{summary:?}"
+        );
+        assert!((summary.distance_m - 1852.0).abs() < 10.0, "{summary:?}");
     }
 
     #[test]
