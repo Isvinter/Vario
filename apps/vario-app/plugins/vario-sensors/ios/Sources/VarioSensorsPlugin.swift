@@ -63,6 +63,9 @@ final class SensorBridge: NSObject, CLLocationManagerDelegate {
     return queue
   }()
 
+  /// When the sensors were started. Locations measured before are cached ones from an
+  /// earlier use and are dropped.
+  private var startedAt = Date()
   /// Tokens of the notification observers, to remove them again in `stop`.
   private var observers: [NSObjectProtocol] = []
   /// `true` from the start of an audio interruption until the session is active again.
@@ -70,6 +73,7 @@ final class SensorBridge: NSObject, CLLocationManagerDelegate {
   private var audioRetryTimer: Timer?
 
   func start() -> JSObject {
+    startedAt = Date()
     let audioSession = configureAudioSession()
     observeAudioInterruptions()
     startLocation()
@@ -227,7 +231,16 @@ final class SensorBridge: NSObject, CLLocationManagerDelegate {
     // clock time of each fix to that same clock so Rust sees one common time base.
     let uptime = ProcessInfo.processInfo.systemUptime
     let now = Date()
+    // When updates start, iOS first hands out its last known location, possibly minutes
+    // old and from somewhere else (seen on the device: fixes 30 s older than the start).
+    // Only locations measured since the start belong to this flight.
     for location in locations where location.horizontalAccuracy >= 0 {
+      if location.timestamp < startedAt {
+        NSLog(
+          "vario: dropped location measured %.1f s before the start",
+          startedAt.timeIntervalSince(location.timestamp))
+        continue
+      }
       let timeS = uptime - now.timeIntervalSince(location.timestamp)
       varioPushGps(
         timeS,
