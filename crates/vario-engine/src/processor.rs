@@ -162,24 +162,25 @@ struct Recording {
     dir: PathBuf,
     /// Chosen when the first fix is saved, because the name contains the start time.
     path: Option<PathBuf>,
-    saved_fixes: usize,
+    /// Revision of the track that was last written.
+    saved_revision: u64,
     error: Option<String>,
 }
 
 impl Recording {
-    /// Writes the flight to its file if fixes were added since the last save.
+    /// Writes the flight to its file if the track changed since the last save.
     ///
     /// The whole file is written to a temporary file which then replaces the old one.
     /// Whatever happens (crash, battery empty), the file on disk is always a complete,
     /// valid IGC file, at most one save interval behind.
     fn save(&mut self) -> io::Result<()> {
-        let fix_count = self.recorder.fixes().len();
+        let revision = self.recorder.revision();
+        if revision == self.saved_revision {
+            return Ok(());
+        }
         let (Some(start), Some(file)) = (self.recorder.start(), self.recorder.to_igc()) else {
             return Ok(());
         };
-        if fix_count == self.saved_fixes {
-            return Ok(());
-        }
         let path = match &self.path {
             Some(path) => path.clone(),
             None => {
@@ -192,7 +193,7 @@ impl Recording {
         let temporary = path.with_extension("tmp");
         std::fs::write(&temporary, file.to_string())?;
         std::fs::rename(&temporary, &path)?;
-        self.saved_fixes = fix_count;
+        self.saved_revision = revision;
         Ok(())
     }
 }
@@ -275,7 +276,7 @@ impl Processor {
             recorder: TrackRecorder::new(FlightMeta::default()),
             dir: dir.to_owned(),
             path: None,
-            saved_fixes: 0,
+            saved_revision: 0,
             error: None,
         });
     }
