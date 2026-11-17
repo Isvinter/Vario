@@ -11,6 +11,9 @@
 //!
 //! The simulator on the desktop feeds the same channel through [`push`], so everything
 //! behind the channel is identical on all platforms.
+//!
+//! Besides sensor samples, native code reports here when the audio session can be used
+//! again after an interruption ([`vario_audio_session_resumed`]).
 
 // Exporting a function under a fixed C name is "unsafe" in Rust's sense because two
 // functions with the same name would silently clash at link time. The names here carry
@@ -18,6 +21,7 @@
 #![allow(unsafe_code)]
 
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use flight_core::sensor::{AccelSample, GpsFix, PressureSample, SensorEvent};
@@ -58,6 +62,28 @@ fn lock_sender() -> std::sync::MutexGuard<'static, Option<Sender<SensorEvent>>> 
     SENDER
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// How often native code has reported that the audio session is usable again after an
+/// interruption (a phone call, an alarm, Siri, ...).
+///
+/// An atomic integer can be read and changed from any thread without a lock. Swift
+/// increments it; the audio thread compares it with the value it saw last and reopens
+/// the audio output when it changed.
+static AUDIO_RESUMED: AtomicU64 = AtomicU64::new(0);
+
+/// Number of [`vario_audio_session_resumed`] calls so far.
+pub fn audio_resume_count() -> u64 {
+    // `Relaxed`: only this one number matters, no other memory has to be in sync with it.
+    AUDIO_RESUMED.load(Ordering::Relaxed)
+}
+
+/// Native code calls this after an audio interruption has ended and the audio session
+/// is active again. The audio output then has to be reopened: on iOS the old one stays
+/// silent after an interruption.
+#[unsafe(no_mangle)]
+pub extern "C" fn vario_audio_session_resumed() {
+    AUDIO_RESUMED.fetch_add(1, Ordering::Relaxed);
 }
 
 /// Vertical acceleration sample. `time_s`: seconds on the platform's monotonic clock.
@@ -155,6 +181,14 @@ mod tests {
 
     // The channel is global, so everything that uses it lives in one test; separate
     // tests run in parallel and would disturb each other.
+    #[test]
+    fn counts_audio_session_resumes() {
+        let before = audio_resume_count();
+        vario_audio_session_resumed();
+        // Other tests run in parallel but never touch this counter.
+        assert_eq!(audio_resume_count(), before + 1);
+    }
+
     #[test]
     fn pushed_samples_arrive_in_order_and_invalid_ones_are_dropped() {
         vario_push_accel(0.5, 1.0); // nobody connected yet: discarded

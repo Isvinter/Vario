@@ -5,8 +5,9 @@
 // crate. Nothing here goes through the web view, so it keeps working while the screen
 // is locked (given the background modes "audio" and "location" in Info.plist).
 //
-// NOTE: tested on an iPhone 13 Pro Max (iOS 27.2) indoors: motion and barometer deliver
-// without gaps with the screen locked. GPS outdoors is not yet tested.
+// NOTE: tested on an iPhone 13 Pro Max (iOS 27.2): motion, barometer and GPS deliver
+// without gaps with the screen locked, also outdoors and during a phone call. Resuming
+// the tone after an audio interruption is not yet tested on the device.
 
 import AVFoundation
 import CoreLocation
@@ -24,6 +25,9 @@ private func varioPushAccel(_ timeS: Double, _ verticalMps2: Double)
 @_silgen_name("vario_push_pressure")
 private func varioPushPressure(_ timeS: Double, _ pressurePa: Double)
 
+@_silgen_name("vario_audio_session_resumed")
+private func varioAudioSessionResumed()
+
 @_silgen_name("vario_push_gps")
 private func varioPushGps(
   _ timeS: Double,
@@ -38,6 +42,9 @@ private func varioPushGps(
 
 private let standardGravity = 9.80665
 private let motionRateHz = 50.0
+/// While an audio interruption is not known to be over, try this often to get the audio
+/// session back.
+private let audioRetryIntervalS = 2.0
 
 // MARK: - Sensors
 
@@ -56,8 +63,15 @@ final class SensorBridge: NSObject, CLLocationManagerDelegate {
     return queue
   }()
 
+  /// Tokens of the notification observers, to remove them again in `stop`.
+  private var observers: [NSObjectProtocol] = []
+  /// `true` from the start of an audio interruption until the session is active again.
+  private var audioInterrupted = false
+  private var audioRetryTimer: Timer?
+
   func start() -> JSObject {
     let audioSession = configureAudioSession()
+    observeAudioInterruptions()
     startLocation()
     let hasAltimeter = startAltimeter()
     let hasMotion = startMotion()
@@ -72,6 +86,13 @@ final class SensorBridge: NSObject, CLLocationManagerDelegate {
   }
 
   func stop() {
+    for observer in observers {
+      NotificationCenter.default.removeObserver(observer)
+    }
+    observers = []
+    audioRetryTimer?.invalidate()
+    audioRetryTimer = nil
+    audioInterrupted = false
     locationManager.stopUpdatingLocation()
     altimeter.stopRelativeAltitudeUpdates()
     motionManager.stopDeviceMotionUpdates()
@@ -94,6 +115,83 @@ final class SensorBridge: NSObject, CLLocationManagerDelegate {
     } catch {
       return "error: \(error.localizedDescription)"
     }
+  }
+
+  // MARK: Audio interruptions
+
+  /// A phone call, an alarm or Siri interrupts the audio session; afterwards the app has
+  /// to activate it again and Rust has to reopen its audio output, otherwise the tone
+  /// stays silent. iOS does not always send the "ended" notification, so while an
+  /// interruption is open, the session is also retried on a timer and whenever the app
+  /// comes to the foreground. The tone resumes even if iOS does not suggest it
+  /// (`shouldResume`): a vario must not stay silent after a call.
+  private func observeAudioInterruptions() {
+    let center = NotificationCenter.default
+    let session = AVAudioSession.sharedInstance()
+    observers.append(
+      center.addObserver(
+        forName: AVAudioSession.interruptionNotification, object: session, queue: .main
+      ) { [weak self] notification in
+        guard let self = self,
+          let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+          let type = AVAudioSession.InterruptionType(rawValue: raw)
+        else { return }
+        switch type {
+        case .began:
+          NSLog("vario: audio interruption began")
+          self.audioInterrupted = true
+          self.startAudioRetryTimer()
+        case .ended:
+          NSLog("vario: audio interruption ended")
+          self.resumeAudio()
+        @unknown default:
+          break
+        }
+      })
+    // The media services restarted (rare): every audio object is invalid now.
+    observers.append(
+      center.addObserver(
+        forName: AVAudioSession.mediaServicesWereResetNotification, object: session,
+        queue: .main
+      ) { [weak self] _ in
+        NSLog("vario: media services were reset")
+        self?.audioInterrupted = true
+        self?.resumeAudio()
+      })
+    observers.append(
+      center.addObserver(
+        forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+      ) { [weak self] _ in
+        if self?.audioInterrupted == true {
+          self?.resumeAudio()
+        }
+      })
+  }
+
+  private func startAudioRetryTimer() {
+    audioRetryTimer?.invalidate()
+    audioRetryTimer = Timer.scheduledTimer(withTimeInterval: audioRetryIntervalS, repeats: true)
+    { [weak self] _ in
+      self?.resumeAudio()
+    }
+  }
+
+  /// Activates the audio session again and tells Rust to reopen its output. Does
+  /// nothing while the interruption is still going on (e.g. during the call), then the
+  /// timer tries again.
+  private func resumeAudio() {
+    let result = configureAudioSession()
+    guard result == "ok" else {
+      NSLog("vario: audio session not available yet: \(result)")
+      if audioRetryTimer == nil {
+        startAudioRetryTimer()
+      }
+      return
+    }
+    audioInterrupted = false
+    audioRetryTimer?.invalidate()
+    audioRetryTimer = nil
+    varioAudioSessionResumed()
   }
 
   // MARK: Location
