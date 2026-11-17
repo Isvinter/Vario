@@ -20,10 +20,10 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 | 0 | Prüfen und planen, `CLAUDE.md` | freigegeben |
 | 1 | Workspace, `flight-core` (Sensor-Traits, IGC), `sensor-sim` | freigegeben |
 | 2 | Vario-Filter, `vario-audio`, CLI auf Linux | freigegeben |
-| 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | Workspace baut und testet auf Linux und macOS (Desktop-Selbsttest auf beiden); auf dem iPhone 13 Pro Max bestanden: Ton und Sensoren (50 Hz / 1 Hz) laufen gesperrt und im Hintergrund lückenlos, Tauri bleibt; offen nur der Test draußen (GPS, Akku, Anruf); Ergebnisse: `docs/ios-test.md`; wartet auf Freigabe |
+| 2b | Früher iOS-Test am Mac: minimale Tauri-App, Ton + Sensoren bei gesperrtem Bildschirm | freigegeben (Tauri bleibt; Anruftest nicht bestanden → Phase 5; Akku offen; Ergebnisse: `docs/ios-test.md`) |
 | 3 | App auf Linux (Instrumente, Einstellungen, Karte) | freigegeben (geprüft auf macOS und im iOS-Simulator; auf Linux seit Phase 2b nicht mehr geprüft) |
 | 4 | Aufzeichnung, Flugliste | freigegeben (geprüft auf macOS und im iOS-Simulator; auf Linux nicht geprüft) |
-| 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | offen |
+| 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | in Arbeit (Sensorbrücke, Hintergrund, Audio-Session-Kategorie schon aus 2b; zuerst Audio-Unterbrechungen) |
 
 Den Status hier nach jeder Freigabe aktualisieren.
 

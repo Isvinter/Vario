@@ -4,8 +4,10 @@ Ziel: herausfinden, ob Tauri auf dem iPhone für den Flugcomputer trägt, **bevo
 Oberfläche gebaut wird. Die Test-App spielt den Vario-Ton aus den echten Sensoren, zeigt,
 wie regelmäßig jeder Sensor liefert, und schreibt alles in Logdateien.
 
-**Stand (11.11.2026):** Die App läuft auf dem **iPhone 13 Pro Max (iOS 27.2)**. Die Teile
-A und B des Testablaufs sind bestanden; Teil C (draußen, GPS, Akku, Anruf) steht aus.
+**Stand (17.11.2026):** Die App läuft auf dem **iPhone 13 Pro Max (iOS 27.2)**. Die Teile
+A und B des Testablaufs sind bestanden, Teil C ist bis auf den Akku durchgeführt: GPS
+draußen in Ordnung, der Anruftest ist **nicht bestanden** (Ursache bekannt, siehe unten).
+Phase 2b ist damit freigegeben; der Anruf-Fehler wird in Phase 5 behoben.
 
 **Auf dem iPhone geprüft (im Gebäude, am Kabel):**
 
@@ -26,10 +28,26 @@ A und B des Testablaufs sind bestanden; Teil C (draußen, GPS, Akku, Anruf) steh
   Keine einzige Lücke; der Testton lief laut Nutzer gesperrt durch. Der Steigwert steht
   in Ruhe bei etwa ±0,1 m/s.
 
-**Auf dem iPhone noch offen:** GPS kam im Gebäude nur vereinzelt (8 Positionen in 26
-Minuten) – ob es draußen gesperrt mit 1 Hz liefert, zeigt erst Teil C. Ebenso offen:
-Akkuverbrauch, Verhalten nach einem Anruf, Vario-Gefühl bei echtem Höhenunterschied.
-Der Test lief am Kabel; ohne Kabel ist er nicht wiederholt worden.
+**Teil C (draußen, ohne Kabel, 15. und 17.11.2026):** vier Läufe von 13 bis 22 Minuten
+mit dem Fahrrad in der Stadt und zu Fuß, nicht im Flug. Ausgewertet aus den Rohdaten
+(nicht im Repository, weil sie Positionen enthalten):
+
+- Beschleunigung und Luftdruck liefen in allen Läufen ohne Lücke (49,7 Hz bzw. 0,94 Hz),
+  auch während eines Anrufs.
+- GPS liefert draußen 1 Hz mit 3D-Fix. In Gebäuden fällt es bis zu drei Minuten aus;
+  iOS liefert dann grobe Positionen ohne Höhe, die Hunderte Meter springen können.
+- Jeder Luftdruckwert erreicht Rust etwa **2,7 s nach seinem Zeitstempel**. Filter und
+  Aufzeichnung verrechnen ihn deshalb zu seinem Messzeitpunkt (seit `b6af3fe` bzw.
+  `5319e20`); vorher fehlte die Druckhöhe in den IGC-Dateien.
+- Rauschen der Druckhöhe: etwa 4 cm bei ruhigem Wetter, etwa 30 cm (Ausreißer bis 3 m)
+  bei Sturm zwischen Gebäuden.
+- **Anruf:** Danach kam der Ton nicht zurück. Sensoren, Filter und Aufzeichnung liefen
+  weiter. Ursache: Die App reagiert noch nicht auf Unterbrechungen der Audio-Session.
+- **Akku:** Die Anzeige stand vor und nach einem 13-Minuten-Lauf auf 100 %; für eine
+  Aussage braucht es einen längeren Lauf.
+
+**Noch offen:** Akkuverbrauch über eine Stunde und mehr, Ton nach einem Anruf (nach der
+Korrektur), Vario-Gefühl bei echtem Höhenunterschied im Flug.
 
 **Bewertung:** Tauri trägt für den Hintergrundbetrieb, die Oberfläche kann wie geplant
 mit Tauri gebaut werden.
