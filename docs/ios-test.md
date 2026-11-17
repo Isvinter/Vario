@@ -135,8 +135,10 @@ Das Projekt liegt auf GitHub (`origin`) und wird von dort auf den Mac geklont.
   (*Allgemein → VPN & Geräteverwaltung*).
 
 Eine kostenlose Apple-ID („Personal Team“) reicht, auch für die Hintergrund-Modi
-(geprüft). Die installierte App läuft damit nach meinem Kenntnisstand nach 7 Tagen ab
-und muss dann neu installiert werden (nicht geprüft).
+(geprüft). Die installierte App läuft damit nach 7 Tagen ab und muss dann neu
+installiert werden (vom Nutzer geprüft); außerdem sind höchstens 3 selbst signierte
+Apps gleichzeitig installierbar. Mit dem bezahlten Apple Developer Program
+(99 $/Jahr) gilt die Signatur ein Jahr, und die Grenze von 3 Apps entfällt.
 
 Was beim ersten Mal zusätzlich nötig war:
 
