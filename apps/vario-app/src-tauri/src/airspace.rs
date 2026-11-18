@@ -11,6 +11,27 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use tauri::AppHandle;
 
+/// File in the config folder listing the categories the map does not show, one per line.
+const HIDDEN_FILE_NAME: &str = "airspace-hidden.txt";
+/// Hidden as long as nothing was chosen: information sectors, FIR, military low flying
+/// areas and the like would only clutter the map.
+const HIDDEN_BY_DEFAULT: [&str; 1] = ["other"];
+
+/// All categories with the names the map style uses (see `map.js`).
+const CATEGORIES: [(Category, &str); 11] = [
+    (Category::Ctr, "ctr"),
+    (Category::Controlled, "controlled"),
+    (Category::ClassE, "classE"),
+    (Category::Restricted, "restricted"),
+    (Category::Danger, "danger"),
+    (Category::Prohibited, "prohibited"),
+    (Category::Tmz, "tmz"),
+    (Category::Rmz, "rmz"),
+    (Category::GliderSector, "gliderSector"),
+    (Category::Reserved, "reserved"),
+    (Category::Other, "other"),
+];
+
 /// File name endings read as OpenAir.
 const EXTENSIONS: [&str; 2] = ["txt", "openair"];
 /// At most this many issues per file are passed on; a broken file can have thousands.
@@ -36,6 +57,8 @@ pub struct Airspaces {
     pub files: Vec<FileSummary>,
     /// GeoJSON feature collection, one polygon per airspace.
     pub geojson: Value,
+    /// Categories the map does not show.
+    pub hidden: Vec<String>,
 }
 
 /// The folder holding the OpenAir files.
@@ -47,7 +70,38 @@ pub fn dir(app: &AppHandle) -> Option<PathBuf> {
 pub fn load(app: &AppHandle) -> Result<Airspaces, String> {
     let dir = dir(app).ok_or("no data folder")?;
     std::fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
-    load_dir(&dir)
+    let mut airspaces = load_dir(&dir)?;
+    airspaces.hidden = load_hidden(app);
+    Ok(airspaces)
+}
+
+/// The categories the map does not show.
+pub fn load_hidden(app: &AppHandle) -> Vec<String> {
+    crate::settings::config_file(app, HIDDEN_FILE_NAME)
+        .ok()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .map(|text| parse_hidden(&text))
+        .unwrap_or_else(|| HIDDEN_BY_DEFAULT.map(str::to_string).to_vec())
+}
+
+/// Saves the categories the map does not show and returns them as stored (unknown names
+/// are dropped).
+pub fn save_hidden(app: &AppHandle, hidden: &[String]) -> Result<Vec<String>, String> {
+    let hidden = parse_hidden(&hidden.join("\n"));
+    let path = crate::settings::config_file(app, HIDDEN_FILE_NAME)?;
+    // An empty file means "show everything", which is different from no file at all.
+    crate::settings::write_file(path, &hidden.join("\n"))?;
+    Ok(hidden)
+}
+
+/// Known category names from `text`, one per line, in the order of [`CATEGORIES`].
+fn parse_hidden(text: &str) -> Vec<String> {
+    let names: Vec<&str> = text.lines().map(str::trim).collect();
+    CATEGORIES
+        .iter()
+        .filter(|(_, name)| names.contains(name))
+        .map(|(_, name)| name.to_string())
+        .collect()
 }
 
 /// Reads all OpenAir files in `dir`, in the order of their names.
@@ -101,6 +155,7 @@ pub fn load_dir(dir: &Path) -> Result<Airspaces, String> {
     Ok(Airspaces {
         files,
         geojson: json!({ "type": "FeatureCollection", "features": features }),
+        hidden: Vec::new(),
     })
 }
 
@@ -173,21 +228,12 @@ fn round_to_ten(metres: f64) -> i64 {
     ((metres / 10.0).round() * 10.0) as i64
 }
 
-/// Category names used by the map style (see `map.js`).
+/// The name the map style uses for `category`.
 fn category_name(category: Category) -> &'static str {
-    match category {
-        Category::Ctr => "ctr",
-        Category::Controlled => "controlled",
-        Category::ClassE => "classE",
-        Category::Restricted => "restricted",
-        Category::Danger => "danger",
-        Category::Prohibited => "prohibited",
-        Category::Tmz => "tmz",
-        Category::Rmz => "rmz",
-        Category::GliderSector => "gliderSector",
-        Category::Reserved => "reserved",
-        Category::Other => "other",
-    }
+    CATEGORIES
+        .iter()
+        .find(|(known, _)| *known == category)
+        .map_or("other", |(_, name)| name)
 }
 
 #[cfg(test)]
@@ -196,6 +242,12 @@ mod tests {
 
     const CTR: &str = "AC D\nAY CTR\nAN Example CTR\nAL GND\nAH 3500ft MSL\n\
         DP 47:40:00 N 011:20:00 E\nDP 47:30:00 N 011:30:00 E\nDP 47:40:00 N 011:30:00 E\n";
+
+    #[test]
+    fn hidden_categories_keep_only_known_names() {
+        assert_eq!(parse_hidden("other\n tmz \nnonsense\n"), ["tmz", "other"]);
+        assert_eq!(parse_hidden(""), Vec::<String>::new());
+    }
 
     #[test]
     fn labels_show_the_source_unit_and_metres() {

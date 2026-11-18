@@ -333,6 +333,12 @@ body {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+.flight .issues {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .flight .button {
   min-height: 44px;
 }

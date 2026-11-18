@@ -198,6 +198,12 @@ async fn airspaces(app: AppHandle) -> Result<airspace::Airspaces, String> {
     airspace::load(&app)
 }
 
+/// Saves which airspace categories the map hides; returns them as stored.
+#[tauri::command]
+fn set_hidden_airspace(app: AppHandle, hidden: Vec<String>) -> Result<Vec<String>, String> {
+    airspace::save_hidden(&app, &hidden)
+}
+
 /// Chooses the offline map style (flying or topo) and saves the choice.
 #[tauri::command]
 fn set_offline_map_style(app: AppHandle, style: maps::OfflineStyle) -> Result<(), String> {
@@ -383,6 +389,7 @@ pub fn run() {
             offline_maps,
             set_offline_map_style,
             airspaces,
+            set_hidden_airspace,
             get_map_source,
             set_map_source,
             map_regions,

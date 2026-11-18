@@ -52,6 +52,8 @@ function showPage(name) {
   if (name === "settings") {
     updateMapStyle();
     refreshRegions();
+    // Files copied in meanwhile are read.
+    loadAirspaces();
   }
   if (name === "flights") loadFlights();
 }
@@ -525,16 +527,94 @@ $("save-map-style").addEventListener("click", async () => {
 
 // ---- Airspaces: OpenAir files in the folder "airspace" ----
 
-let airspaceFiles = [];
+// Categories as named in airspace.rs, in the order of the buttons.
+const AIRSPACE_CATEGORIES = [
+  ["ctr", "CTR"],
+  ["controlled", "C / D"],
+  ["classE", "E"],
+  ["tmz", "TMZ"],
+  ["rmz", "RMZ"],
+  ["restricted", "Beschränkung (ED-R)"],
+  ["prohibited", "Sperrgebiet"],
+  ["danger", "Gefahr, Fallschirm"],
+  ["gliderSector", "Segelflug"],
+  ["reserved", "TRA (Österreich)"],
+  ["other", "Sonstige (FIS, LFA)"],
+];
+
+let hiddenAirspace = [];
 
 async function loadAirspaces() {
   try {
     const result = await invoke("airspaces");
-    airspaceFiles = result.files;
+    hiddenAirspace = result.hidden;
+    FlightMap.setAirspaceHidden(hiddenAirspace);
     FlightMap.setAirspaces(result.geojson);
+    showAirspaceFiles(result.files);
+    showAirspaceCategories();
   } catch (error) {
     console.warn("airspaces", error);
+    $("airspace-files").textContent = "Lufträume nicht lesbar: " + error;
   }
+}
+
+function showAirspaceFiles(files) {
+  $("airspace-none").hidden = files.length > 0;
+  $("airspace-files").replaceChildren(
+    ...files.map((file) => {
+      const element = document.createElement("div");
+      element.className = "flight";
+      const title = document.createElement("div");
+      title.className = "flight-title";
+      title.textContent = file.name;
+      const facts = document.createElement("div");
+      facts.className = "flight-facts";
+      if (file.error) {
+        facts.textContent = "Nicht lesbar: " + file.error;
+      } else {
+        const parts = [file.airspaces + " Lufträume"];
+        if (file.issueCount > 0) parts.push(file.issueCount + " übersprungen oder unklar");
+        facts.textContent = parts.join(" · ");
+      }
+      element.append(title, facts);
+      if (file.issues.length > 0) {
+        // The details are in English (from the parser); they are meant for checking a file.
+        const details = document.createElement("details");
+        const summary = document.createElement("summary");
+        summary.textContent = "Meldungen";
+        const list = document.createElement("pre");
+        list.className = "issues";
+        list.textContent = file.issues.join("\n");
+        details.append(summary, list);
+        element.append(details);
+      }
+      return element;
+    }),
+  );
+}
+
+function showAirspaceCategories() {
+  $("airspace-categories").replaceChildren(
+    ...AIRSPACE_CATEGORIES.map(([category, label]) => {
+      const button = document.createElement("button");
+      button.className = "button";
+      button.textContent = label;
+      button.classList.toggle("on", !hiddenAirspace.includes(category));
+      button.addEventListener("click", async () => {
+        const hidden = hiddenAirspace.includes(category)
+          ? hiddenAirspace.filter((name) => name !== category)
+          : hiddenAirspace.concat([category]);
+        try {
+          hiddenAirspace = await invoke("set_hidden_airspace", { hidden });
+          FlightMap.setAirspaceHidden(hiddenAirspace);
+          showAirspaceCategories();
+        } catch (error) {
+          $("settings-message").textContent = "Nicht übernommen: " + error;
+        }
+      });
+      return button;
+    }),
+  );
 }
 
 // ---- Regions: installed and on offer from the desktop (outdoor_app) ----

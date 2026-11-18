@@ -41,6 +41,15 @@ const FlightMap = (() => {
   const FILLED_AIRSPACE = ["ctr", "restricted", "danger", "prohibited"];
   // Drawn with a dashed border: zones with rules (transponder, radio) and class E.
   const DASHED_AIRSPACE = ["tmz", "rmz", "classE"];
+  const SOLID_AIRSPACE = FILLED_AIRSPACE.concat(["controlled", "gliderSector", "reserved", "other"]);
+  // The airspace layers and the categories each one draws (null: all).
+  const AIRSPACE_LAYERS = {
+    "airspace-fill": FILLED_AIRSPACE,
+    "airspace-band": null,
+    "airspace-line": SOLID_AIRSPACE,
+    "airspace-line-dashed": DASHED_AIRSPACE,
+    "airspace-label": null,
+  };
 
   let map = null;
   let marker = null;
@@ -167,8 +176,9 @@ const FlightMap = (() => {
     addTrackLayers();
   }
 
-  /** Filter expression for the visible airspaces of the given categories (all if null). */
-  function airspaceFilter(categories) {
+  /** Filter expression for the visible airspaces drawn by a layer. */
+  function airspaceFilter(layer) {
+    const categories = AIRSPACE_LAYERS[layer];
     const visible = ["!", ["in", ["get", "category"], ["literal", hiddenAirspace]]];
     if (!categories) return visible;
     return ["all", visible, ["in", ["get", "category"], ["literal", categories]]];
@@ -181,7 +191,7 @@ const FlightMap = (() => {
       id: "airspace-fill",
       type: "fill",
       source: AIRSPACE_SOURCE,
-      filter: airspaceFilter(FILLED_AIRSPACE),
+      filter: airspaceFilter("airspace-fill"),
       paint: { "fill-color": AIRSPACE_COLOR, "fill-opacity": 0.1 },
     });
     // The rings come counterclockwise (Rust makes sure of it); on the screen, with y
@@ -190,7 +200,7 @@ const FlightMap = (() => {
       id: "airspace-band",
       type: "line",
       source: AIRSPACE_SOURCE,
-      filter: airspaceFilter(null),
+      filter: airspaceFilter("airspace-band"),
       layout: { "line-join": "round" },
       paint: {
         "line-color": AIRSPACE_COLOR,
@@ -199,12 +209,11 @@ const FlightMap = (() => {
         "line-offset": ["interpolate", ["linear"], ["zoom"], 7, 1.5, 12, 4],
       },
     });
-    const notDashed = FILLED_AIRSPACE.concat(["controlled", "gliderSector", "reserved", "other"]);
     map.addLayer({
       id: "airspace-line",
       type: "line",
       source: AIRSPACE_SOURCE,
-      filter: airspaceFilter(notDashed),
+      filter: airspaceFilter("airspace-line"),
       layout: { "line-join": "round" },
       paint: { "line-color": AIRSPACE_COLOR, "line-width": 1.4 },
     });
@@ -212,7 +221,7 @@ const FlightMap = (() => {
       id: "airspace-line-dashed",
       type: "line",
       source: AIRSPACE_SOURCE,
-      filter: airspaceFilter(DASHED_AIRSPACE),
+      filter: airspaceFilter("airspace-line-dashed"),
       paint: { "line-color": AIRSPACE_COLOR, "line-width": 1.4, "line-dasharray": [4, 2] },
     });
     // Labels need glyphs, which the fallback style does not have.
@@ -222,7 +231,7 @@ const FlightMap = (() => {
       type: "symbol",
       source: AIRSPACE_SOURCE,
       minzoom: 9,
-      filter: airspaceFilter(null),
+      filter: airspaceFilter("airspace-label"),
       layout: {
         "symbol-placement": "line",
         "symbol-spacing": 350,
@@ -407,6 +416,15 @@ const FlightMap = (() => {
       airspaceData = geojson;
       const source = map && map.getSource(AIRSPACE_SOURCE);
       if (source) source.setData(airspaceData);
+    },
+
+    /** Hides the airspaces of these categories (names as in airspace.rs). */
+    setAirspaceHidden(categories) {
+      hiddenAirspace = categories;
+      if (!map) return;
+      for (const layer of Object.keys(AIRSPACE_LAYERS)) {
+        if (map.getLayer(layer)) map.setFilter(layer, airspaceFilter(layer));
+      }
     },
 
     trackLength: () => coordinates.length,

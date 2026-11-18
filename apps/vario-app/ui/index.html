@@ -130,7 +130,19 @@
       <div class="row">
         <button id="connect-map-source" class="button">Verbinden</button>
       </div>
-      <h3>Online-Karte</h3>
+      <h3>Lufträume</h3>
+      <div id="airspace-files"></div>
+      <p id="airspace-none" class="hint">
+        Keine Luftraumdateien. OpenAir-Dateien (<code>.txt</code>, z. B. von openaip.net) in
+        den Ordner <b>airspace</b> der Vario-App kopieren: am Mac im Finder iPhone wählen →
+        Dateien → Vario → airspace. Die App liest sie beim Öffnen der Einstellungen neu.
+      </p>
+      <div class="row" id="airspace-categories"></div>
+      <small class="hint">
+        Angetippte Arten zeigt die Karte. Die Daten sind nicht amtlich: vor dem Flug mit
+        aktueller Luftfahrtkarte und NOTAMs prüfen.
+      </small>
+            <h3>Online-Karte</h3>
       <div class="setting">
         <label for="set-map-style">Kartenstil (URL)</label>
         <input id="set-map-style" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" />
