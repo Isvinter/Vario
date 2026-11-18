@@ -301,6 +301,13 @@ Die UDID liefert `xcrun devicectl list devices`.
     --domain-identifier de.vario.prototyp.flugcomputer \
     --source <region-ordner>/ --destination Documents/maps/<region-id>
   ```
+- **Luftraumdateien aufs iPhone kopieren** (OpenAir, z. B. `de_asp_v2.txt` von
+  openaip.net; die App liest den Ordner beim Start und beim Öffnen der Einstellungen):
+  ```sh
+  xcrun devicectl device copy to --device <UDID> --domain-type appDataContainer \
+    --domain-identifier de.vario.prototyp.flugcomputer \
+    --source <ordner-mit-den-txt-dateien>/ --destination Documents/airspace
+  ```
 
 ### Regionen per WLAN vom Desktop laden
 
