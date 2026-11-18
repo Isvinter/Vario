@@ -26,7 +26,7 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 | 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | in Arbeit (Sensorbrücke, Hintergrund, Audio-Session-Kategorie schon aus 2b; zuerst Audio-Unterbrechungen) |
 | 6 | Offline-Karten: Regionspakete der outdoor_app (`core-maps` per Git), Kachel-Schema `tiles://`, Topo-Stil | freigegeben (Anzeige offline und Flugkarte auf dem iPhone geprüft; Stromleitungen, Seilbahnen und Start-/Landeplätze mit Phase 6b) |
 | 6b | Fertiger Flugstil mit dem neuen Flug-Layer des Region-Builders (Stromleitungen dünn gestrichelt, Seilbahnen dicker und durchgehend, Start-/Landeplätze); Regionen per WLAN von der outdoor_app (Linux-Desktop, `core-share`) auf die Vario-App (iOS) übertragen | freigegeben (Flugstil und WLAN-Übertragung auf dem iPhone geprüft: Aktualisieren, Abbrechen und Fortsetzen gegen `share-serve` am Mac; gegen die echte Freigabe der outdoor_app auf Linux noch nicht; Regionen ohne `flying` zeigen keine Seilbahnen mehr, also neu bauen; QR-Code zum Verbinden später) |
-| 7 | Lufträume: OpenAir einlesen (`flight-core`), Anzeige auf der Karte, später Warnungen; Daten zuerst von openAIP (Deutschland, Österreich; später Schweiz, Norditalien), nicht im Repository | in Arbeit (OpenAir-Parser fertig, liest die openAIP-Dateien (OpenAir 2) für Deutschland und Österreich ohne Meldung; offen: Anzeige auf der Karte) |
+| 7 | Lufträume: OpenAir einlesen (`flight-core`), Anzeige auf der Karte, später Warnungen; Daten zuerst von openAIP (Deutschland, Österreich; später Schweiz, Norditalien), nicht im Repository | in Arbeit (OpenAir-Parser fertig, liest die openAIP-Dateien (OpenAir 2) für Deutschland und Österreich ohne Meldung; Anzeige auf der Karte auf macOS geprüft, auf dem iPhone noch nicht; offen: Liste der Dateien und Filter in den Einstellungen) |
 
 Den Status hier nach jeder Freigabe aktualisieren.
 
@@ -157,6 +157,10 @@ cargo build -p vario-app && HOME=$(mktemp -d) VARIO_SMOKE_TEST=1 VARIO_SMOKE_SHA
 Offline-Kartenregionen liegen im Ordner `maps` (Desktop: Datenordner der App; zum Testen
 reicht dort ein Symlink auf eine Region der outdoor_app). Der Desktop-Simulator fliegt über
 dem Brauneck, also in deren Testregion.
+
+Lufträume liegen als OpenAir-Dateien (`.txt`) im Ordner `airspace` neben `maps`; die App
+legt ihn an und liest ihn beim Start. Die Dateien (openAIP, mit Konto herunterzuladen)
+kommen nicht ins Repository.
 
 Flüge liegen als IGC-Dateien im Ordner `flights` (iOS: Dokumente-Ordner der App, in der
 App „Dateien“ sichtbar; Desktop: Datenordner der App), Sensorlogs daneben in `logs`. Jeder

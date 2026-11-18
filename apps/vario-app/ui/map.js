@@ -16,6 +16,31 @@ const FlightMap = (() => {
   };
   const TRACK_SOURCE = "track";
   const SAVED_SOURCE = "saved-flight";
+  const AIRSPACE_SOURCE = "airspace";
+
+  // Airspace colours by category (set in Rust, see airspace.rs), after the usual chart
+  // conventions: red for restricted and control zones, blue for controlled airspace,
+  // orange for danger areas, green for areas reserved for gliding and paragliding.
+  const AIRSPACE_COLOR = [
+    "match",
+    ["get", "category"],
+    "ctr", "#d4145a",
+    "controlled", "#1f4fbf",
+    "classE", "#5a7fc0",
+    "restricted", "#c01818",
+    "danger", "#d46a00",
+    "prohibited", "#7a0000",
+    "tmz", "#6a3fa0",
+    "rmz", "#2e7f8b",
+    "gliderSector", "#a68400",
+    "reserved", "#1d8a3a",
+    "#808080",
+  ];
+  // These are filled lightly; all others only get a band along the inside of the border,
+  // so that large airspaces do not cover the map.
+  const FILLED_AIRSPACE = ["ctr", "restricted", "danger", "prohibited"];
+  // Drawn with a dashed border: zones with rules (transponder, radio) and class E.
+  const DASHED_AIRSPACE = ["tmz", "rmz", "classE"];
 
   let map = null;
   let marker = null;
@@ -24,6 +49,8 @@ const FlightMap = (() => {
   let follow = true;
   let coordinates = []; // [longitude, latitude] pairs of the track
   let savedCoordinates = []; // the same for a recorded flight being viewed
+  let airspaceData = { type: "FeatureCollection", features: [] };
+  let hiddenAirspace = ["other"]; // categories not shown
   let position = null; // { longitude, latitude, course }
   let onFollowChange = () => {};
   let onMessage = () => {};
@@ -134,6 +161,85 @@ const FlightMap = (() => {
 
   // Sources and layers belong to the style, so they must be added again after every
   // style change.
+  function addOwnLayers() {
+    // Airspaces first: the track goes on top of them.
+    addAirspaceLayers();
+    addTrackLayers();
+  }
+
+  /** Filter expression for the visible airspaces of the given categories (all if null). */
+  function airspaceFilter(categories) {
+    const visible = ["!", ["in", ["get", "category"], ["literal", hiddenAirspace]]];
+    if (!categories) return visible;
+    return ["all", visible, ["in", ["get", "category"], ["literal", categories]]];
+  }
+
+  function addAirspaceLayers() {
+    if (map.getSource(AIRSPACE_SOURCE)) return;
+    map.addSource(AIRSPACE_SOURCE, { type: "geojson", data: airspaceData });
+    map.addLayer({
+      id: "airspace-fill",
+      type: "fill",
+      source: AIRSPACE_SOURCE,
+      filter: airspaceFilter(FILLED_AIRSPACE),
+      paint: { "fill-color": AIRSPACE_COLOR, "fill-opacity": 0.1 },
+    });
+    // The rings come counterclockwise (Rust makes sure of it); on the screen, with y
+    // pointing down, that is clockwise, so a positive offset lies inside.
+    map.addLayer({
+      id: "airspace-band",
+      type: "line",
+      source: AIRSPACE_SOURCE,
+      filter: airspaceFilter(null),
+      layout: { "line-join": "round" },
+      paint: {
+        "line-color": AIRSPACE_COLOR,
+        "line-opacity": 0.25,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 7, 3, 12, 8],
+        "line-offset": ["interpolate", ["linear"], ["zoom"], 7, 1.5, 12, 4],
+      },
+    });
+    const notDashed = FILLED_AIRSPACE.concat(["controlled", "gliderSector", "reserved", "other"]);
+    map.addLayer({
+      id: "airspace-line",
+      type: "line",
+      source: AIRSPACE_SOURCE,
+      filter: airspaceFilter(notDashed),
+      layout: { "line-join": "round" },
+      paint: { "line-color": AIRSPACE_COLOR, "line-width": 1.4 },
+    });
+    map.addLayer({
+      id: "airspace-line-dashed",
+      type: "line",
+      source: AIRSPACE_SOURCE,
+      filter: airspaceFilter(DASHED_AIRSPACE),
+      paint: { "line-color": AIRSPACE_COLOR, "line-width": 1.4, "line-dasharray": [4, 2] },
+    });
+    // Labels need glyphs, which the fallback style does not have.
+    if (!map.getStyle().glyphs) return;
+    map.addLayer({
+      id: "airspace-label",
+      type: "symbol",
+      source: AIRSPACE_SOURCE,
+      minzoom: 9,
+      filter: airspaceFilter(null),
+      layout: {
+        "symbol-placement": "line",
+        "symbol-spacing": 350,
+        "text-field": ["get", "label"],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 11,
+        "text-max-angle": 30,
+        "text-keep-upright": true,
+      },
+      paint: {
+        "text-color": AIRSPACE_COLOR,
+        "text-halo-color": "#fff",
+        "text-halo-width": 1.5,
+      },
+    });
+  }
+
   function addTrackLayers() {
     if (map.getSource(TRACK_SOURCE)) return;
     // The recorded flight being viewed goes below the live track.
@@ -204,7 +310,7 @@ const FlightMap = (() => {
     map.touchZoomRotate.disableRotation();
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
-    map.on("style.load", addTrackLayers);
+    map.on("style.load", addOwnLayers);
     // The offline styles use a few symbols that are drawn here instead of being
     // loaded from a sprite file.
     map.on("styleimagemissing", (event) => {
@@ -296,7 +402,15 @@ const FlightMap = (() => {
       refresh(SAVED_SOURCE, savedCoordinates);
     },
 
+    /** Shows the airspaces (a GeoJSON feature collection). */
+    setAirspaces(geojson) {
+      airspaceData = geojson;
+      const source = map && map.getSource(AIRSPACE_SOURCE);
+      if (source) source.setData(airspaceData);
+    },
+
     trackLength: () => coordinates.length,
+    airspaceCount: () => airspaceData.features.length,
     toggleFollow: () => setFollow(!follow),
   };
 })();

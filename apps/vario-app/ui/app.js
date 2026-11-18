@@ -523,6 +523,20 @@ $("save-map-style").addEventListener("click", async () => {
   }
 });
 
+// ---- Airspaces: OpenAir files in the folder "airspace" ----
+
+let airspaceFiles = [];
+
+async function loadAirspaces() {
+  try {
+    const result = await invoke("airspaces");
+    airspaceFiles = result.files;
+    FlightMap.setAirspaces(result.geojson);
+  } catch (error) {
+    console.warn("airspaces", error);
+  }
+}
+
 // ---- Regions: installed and on offer from the desktop (outdoor_app) ----
 //
 // The list comes from Rust in two steps: at once with only the installed regions, then
@@ -770,6 +784,7 @@ async function init() {
   // connection asks for the local network permission.
   await updateMapStyle();
   refreshRegions(false);
+  loadAirspaces();
   checkPermissions();
   checkInterrupted();
   // Also catches the answers to the permission dialogs iOS shows on the first start.
