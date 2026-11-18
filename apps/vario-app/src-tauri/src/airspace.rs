@@ -4,12 +4,14 @@
 //! feature collection. The folder is created if it is missing, so that it shows up in
 //! the Files app on iOS and the files can be copied into it.
 
+use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 
 use flight_core::airspace::{self, Airspace, Category, Limit, Unit};
 use serde::Serialize;
 use serde_json::{Value, json};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 /// File in the config folder listing the categories the map does not show, one per line.
 const HIDDEN_FILE_NAME: &str = "airspace-hidden.txt";
@@ -59,6 +61,28 @@ pub struct Airspaces {
     pub geojson: Value,
     /// Categories the map does not show.
     pub hidden: Vec<String>,
+    /// The airspaces themselves; kept in Rust (see [`Loaded`]), not sent to the page.
+    #[serde(skip)]
+    pub list: Vec<Airspace>,
+}
+
+/// The airspaces read last, for looking up what lies at a position. Managed by Tauri
+/// (`app.manage`); the `Mutex` lets the command threads share it.
+#[derive(Default)]
+pub struct Loaded(Mutex<Vec<Airspace>>);
+
+/// One airspace at a position, as shown when the map is tapped.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AirspaceInfo {
+    pub name: String,
+    pub category: &'static str,
+    pub class: String,
+    pub kind: Option<String>,
+    pub lower: String,
+    pub upper: String,
+    pub frequency: Option<String>,
+    pub station: Option<String>,
 }
 
 /// The folder holding the OpenAir files.
@@ -72,7 +96,50 @@ pub fn load(app: &AppHandle) -> Result<Airspaces, String> {
     std::fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
     let mut airspaces = load_dir(&dir)?;
     airspaces.hidden = load_hidden(app);
+    let loaded = app.state::<Loaded>();
+    *loaded.0.lock().unwrap_or_else(PoisonError::into_inner) = airspaces.list.clone();
     Ok(airspaces)
+}
+
+/// The airspaces at a position, lowest first.
+pub fn at(app: &AppHandle, lat_deg: f64, lon_deg: f64) -> Vec<AirspaceInfo> {
+    let loaded = app.state::<Loaded>();
+    let list = loaded.0.lock().unwrap_or_else(PoisonError::into_inner);
+    containing(&list, lat_deg, lon_deg)
+}
+
+/// The airspaces of `list` containing the position, sorted by lower, then upper limit.
+/// Heights above ground are compared as if the ground were at sea level, which is
+/// good enough for the order of a list.
+fn containing(list: &[Airspace], lat_deg: f64, lon_deg: f64) -> Vec<AirspaceInfo> {
+    let mut found: Vec<&Airspace> = list
+        .iter()
+        .filter(|airspace| airspace.contains(lat_deg, lon_deg))
+        .collect();
+    let height = |limit: &Limit| limit.metres().unwrap_or(f64::INFINITY);
+    found.sort_by(|a, b| {
+        height(&a.lower)
+            .partial_cmp(&height(&b.lower))
+            .unwrap_or(Ordering::Equal)
+            .then(
+                height(&a.upper)
+                    .partial_cmp(&height(&b.upper))
+                    .unwrap_or(Ordering::Equal),
+            )
+    });
+    found
+        .into_iter()
+        .map(|airspace| AirspaceInfo {
+            name: airspace.name.clone(),
+            category: category_name(airspace.category()),
+            class: airspace.class.clone(),
+            kind: airspace.kind.clone(),
+            lower: limit_label(&airspace.lower),
+            upper: limit_label(&airspace.upper),
+            frequency: airspace.frequency.clone(),
+            station: airspace.station.clone(),
+        })
+        .collect()
 }
 
 /// The categories the map does not show.
@@ -121,6 +188,7 @@ pub fn load_dir(dir: &Path) -> Result<Airspaces, String> {
 
     let mut files = Vec::new();
     let mut features = Vec::new();
+    let mut list = Vec::new();
     for path in paths {
         let name = path
             .file_name()
@@ -130,9 +198,10 @@ pub fn load_dir(dir: &Path) -> Result<Airspaces, String> {
             Ok(bytes) => {
                 let file = airspace::parse(&bytes);
                 features.extend(file.airspaces.iter().map(feature));
+                let count = file.airspaces.len();
                 files.push(FileSummary {
                     name,
-                    airspaces: file.airspaces.len(),
+                    airspaces: count,
                     issue_count: file.issues.len(),
                     issues: file
                         .issues
@@ -142,6 +211,7 @@ pub fn load_dir(dir: &Path) -> Result<Airspaces, String> {
                         .collect(),
                     error: None,
                 });
+                list.extend(file.airspaces);
             }
             Err(error) => files.push(FileSummary {
                 name,
@@ -156,6 +226,7 @@ pub fn load_dir(dir: &Path) -> Result<Airspaces, String> {
         files,
         geojson: json!({ "type": "FeatureCollection", "features": features }),
         hidden: Vec::new(),
+        list,
     })
 }
 
@@ -242,6 +313,23 @@ mod tests {
 
     const CTR: &str = "AC D\nAY CTR\nAN Example CTR\nAL GND\nAH 3500ft MSL\n\
         DP 47:40:00 N 011:20:00 E\nDP 47:30:00 N 011:30:00 E\nDP 47:40:00 N 011:30:00 E\n";
+
+    #[test]
+    fn lists_the_airspaces_at_a_position_lowest_first() {
+        let text = "AC C\nAY TMA\nAN High\nAL FL65\nAH FL100\n\
+            DP 47:00:00 N 011:00:00 E\nDP 47:00:00 N 012:00:00 E\nDP 48:00:00 N 012:00:00 E\n\
+            AC D\nAY CTR\nAN Low\nAL GND\nAH 3500ft\n\
+            DP 47:00:00 N 011:00:00 E\nDP 47:00:00 N 012:00:00 E\nDP 48:00:00 N 012:00:00 E\n\
+            AC R\nAN Elsewhere\nAL GND\nAH FL100\n\
+            DP 46:00:00 N 011:00:00 E\nDP 46:00:00 N 011:10:00 E\nDP 46:10:00 N 011:10:00 E\n";
+        let list = airspace::parse(text.as_bytes()).airspaces;
+        let found = containing(&list, 47.2, 11.8);
+        let names: Vec<&str> = found.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, ["Low", "High"]);
+        assert_eq!(found[0].category, "ctr");
+        assert_eq!(found[1].lower, "FL65 (1980 m)");
+        assert!(containing(&list, 45.0, 11.0).is_empty());
+    }
 
     #[test]
     fn hidden_categories_keep_only_known_names() {

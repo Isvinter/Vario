@@ -473,6 +473,7 @@ FlightMap.configure({
     $("map-message").textContent = text;
     $("map-message").style.display = text ? "block" : "none";
   },
+  onTap: showAirspacesAt,
 });
 $("follow").addEventListener("click", () => FlightMap.toggleFollow());
 
@@ -557,6 +558,61 @@ async function loadAirspaces() {
     $("airspace-files").textContent = "Lufträume nicht lesbar: " + error;
   }
 }
+
+// ---- Tapping the map lists the airspaces at that place ----
+
+let airspaceRequest = 0; // answers to older taps are dropped
+
+async function showAirspacesAt(latitude, longitude) {
+  const request = ++airspaceRequest;
+  let found;
+  try {
+    found = await invoke("airspaces_at", { latitude, longitude });
+  } catch (error) {
+    console.warn("airspaces_at", error);
+    return;
+  }
+  if (request !== airspaceRequest) return;
+  // Only what the map shows.
+  found = found.filter((airspace) => !hiddenAirspace.includes(airspace.category));
+  FlightMap.markTap(latitude, longitude);
+  const list = $("airspace-info-list");
+  if (found.length === 0) {
+    list.textContent = "Hier ist kein angezeigter Luftraum.";
+  } else {
+    list.replaceChildren(...found.map(airspaceEntry));
+  }
+  $("airspace-info").hidden = false;
+}
+
+function airspaceEntry(airspace) {
+  const element = document.createElement("div");
+  element.className = "airspace-entry";
+  element.style.borderColor = FlightMap.airspaceColor(airspace.category);
+  const kind = AIRSPACE_CATEGORIES.find(([category]) => category === airspace.category);
+  const parts = [kind ? kind[1] : airspace.category];
+  if (airspace.class && airspace.class !== "UNC") parts.push("Klasse " + airspace.class);
+  const lines = [parts.join(" · "), airspace.lower + " bis " + airspace.upper];
+  const radio = [airspace.frequency, airspace.station].filter(Boolean).join(" · ");
+  if (radio) lines.push(radio);
+  const name = document.createElement("div");
+  name.textContent = airspace.name || "(ohne Namen)";
+  element.append(
+    name,
+    ...lines.map((line) => {
+      const small = document.createElement("small");
+      small.textContent = line;
+      return small;
+    }),
+  );
+  return element;
+}
+
+$("close-airspace-info").addEventListener("click", () => {
+  airspaceRequest++;
+  $("airspace-info").hidden = true;
+  FlightMap.markTap(null);
+});
 
 function showAirspaceFiles(files) {
   $("airspace-none").hidden = files.length > 0;

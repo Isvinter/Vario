@@ -58,6 +58,30 @@ pub fn maybe_run(app: &AppHandle) {
         std::thread::sleep(Duration::from_secs(1));
         let _ = window.eval("document.querySelector('.flight .button')?.click()");
         std::thread::sleep(Duration::from_secs(1));
+        // Tap the middle of the map like a user would, with following on (the map moves
+        // under the finger). The events go to whatever lies on top there, as with a real
+        // tap. The airspace list should open.
+        let _ = window.eval(
+            "document.querySelector('[data-page=map]').click();\
+             document.getElementById('close-saved-flight').click();\
+             if (!document.getElementById('follow').classList.contains('on')) {\
+               document.getElementById('follow').click();\
+             }\
+             setTimeout(() => {\
+               const box = document.querySelector('#map canvas').getBoundingClientRect();\
+               const at = { bubbles: true, button: 0, clientX: box.left + box.width / 2,\
+                            clientY: box.top + box.height / 2 };\
+               const canvas = document.elementFromPoint(at.clientX, at.clientY);\
+               canvas.dispatchEvent(new PointerEvent('pointerdown', { ...at, pointerType: 'mouse', isPrimary: true }));\
+               canvas.dispatchEvent(new MouseEvent('mousedown', at));\
+               setTimeout(() => {\
+                 canvas.dispatchEvent(new PointerEvent('pointerup', { ...at, pointerType: 'mouse', isPrimary: true }));\
+                 canvas.dispatchEvent(new MouseEvent('mouseup', at));\
+                 canvas.dispatchEvent(new MouseEvent('click', at));\
+               }, 150);\
+             }, 300)",
+        );
+        std::thread::sleep(Duration::from_secs(1));
         if let Some(address) = share_address() {
             download_from_share(&window, &address);
         }
@@ -66,6 +90,8 @@ pub fn maybe_run(app: &AppHandle) {
              [...document.querySelectorAll('.page')].map((page) => page.innerText).join('\\n') + \
              '\\ntrack points: ' + FlightMap.trackLength() + \
              '\\nairspaces: ' + FlightMap.airspaceCount() + \
+             '\\ntapped airspaces: ' + (document.getElementById('airspace-info').hidden ? '(list not shown) ' : '') + \
+             document.getElementById('airspace-info-list').innerText.replace(/\\n/g, ' | ') + \
              '\\npermission warnings: ' + \
              document.querySelectorAll('#permission-problems li').length + \
              '\\nscript errors: ' + JSON.stringify(window.scriptErrors) })",

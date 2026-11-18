@@ -21,21 +21,20 @@ const FlightMap = (() => {
   // Airspace colours by category (set in Rust, see airspace.rs), after the usual chart
   // conventions: red for restricted and control zones, blue for controlled airspace,
   // orange for danger areas, green for areas reserved for gliding and paragliding.
-  const AIRSPACE_COLOR = [
-    "match",
-    ["get", "category"],
-    "ctr", "#d4145a",
-    "controlled", "#1f4fbf",
-    "classE", "#5a7fc0",
-    "restricted", "#c01818",
-    "danger", "#d46a00",
-    "prohibited", "#7a0000",
-    "tmz", "#6a3fa0",
-    "rmz", "#2e7f8b",
-    "gliderSector", "#a68400",
-    "reserved", "#1d8a3a",
-    "#808080",
-  ];
+  const AIRSPACE_COLORS = {
+    ctr: "#d4145a",
+    controlled: "#1f4fbf",
+    classE: "#5a7fc0",
+    restricted: "#c01818",
+    danger: "#d46a00",
+    prohibited: "#7a0000",
+    tmz: "#6a3fa0",
+    rmz: "#2e7f8b",
+    gliderSector: "#a68400",
+    reserved: "#1d8a3a",
+    other: "#808080",
+  };
+  const AIRSPACE_COLOR = ["match", ["get", "category"], ...Object.entries(AIRSPACE_COLORS).flat(), "#808080"];
   // These are filled lightly; all others only get a band along the inside of the border,
   // so that large airspaces do not cover the map.
   const FILLED_AIRSPACE = ["ctr", "restricted", "danger", "prohibited"];
@@ -63,6 +62,8 @@ const FlightMap = (() => {
   let position = null; // { longitude, latitude, course }
   let onFollowChange = () => {};
   let onMessage = () => {};
+  let onTap = () => {};
+  let tapMarker = null;
 
   /** Map symbols by name, drawn on a canvas; `null` for unknown names. */
   function drawSymbol(name) {
@@ -330,6 +331,8 @@ const FlightMap = (() => {
     map.once("load", fitSavedFlight);
     // Moving the map by hand stops following; the "Folgen" button turns it back on.
     map.on("dragstart", () => setFollow(false));
+    // A tap (not a drag) asks for the airspaces at that place.
+    map.on("click", (event) => onTap(event.lngLat.lat, event.lngLat.lng));
     map.on("error", (event) => {
       // If the style itself cannot be loaded there is no map at all: fall back once.
       if (!map.isStyleLoaded() && !usingFallback && !map.getSource(TRACK_SOURCE)) {
@@ -356,7 +359,24 @@ const FlightMap = (() => {
     configure(options) {
       onFollowChange = options.onFollowChange;
       onMessage = options.onMessage;
+      onTap = options.onTap ?? (() => {});
     },
+
+    /** Marks the tapped place (or removes the mark with null). */
+    markTap(latitude, longitude) {
+      if (latitude === null) {
+        tapMarker?.remove();
+        return;
+      }
+      if (!tapMarker) {
+        const element = document.createElement("div");
+        element.className = "tap-marker";
+        tapMarker = new maplibregl.Marker({ element });
+      }
+      tapMarker.setLngLat([longitude, latitude]).addTo(map);
+    },
+
+    airspaceColor: (category) => AIRSPACE_COLORS[category] ?? AIRSPACE_COLORS.other,
 
     /** Sets the style (URL or style object); reloads the map if it already exists. */
     setStyle(url) {

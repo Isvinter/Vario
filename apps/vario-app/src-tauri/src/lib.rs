@@ -198,6 +198,12 @@ async fn airspaces(app: AppHandle) -> Result<airspace::Airspaces, String> {
     airspace::load(&app)
 }
 
+/// The airspaces at a position (from the files read last), lowest first.
+#[tauri::command]
+fn airspaces_at(app: AppHandle, latitude: f64, longitude: f64) -> Vec<airspace::AirspaceInfo> {
+    airspace::at(&app, latitude, longitude)
+}
+
 /// Saves which airspace categories the map hides; returns them as stored.
 #[tauri::command]
 fn set_hidden_airspace(app: AppHandle, hidden: Vec<String>) -> Result<Vec<String>, String> {
@@ -360,6 +366,7 @@ pub fn run() {
         .plugin(tauri_plugin_vario_sensors::init())
         .manage(AppState::default())
         .manage(maps::Maps::default())
+        .manage(airspace::Loaded::default())
         .manage(share::Downloads::default())
         .register_asynchronous_uri_scheme_protocol(maps::SCHEME, |context, request, responder| {
             // Tiles are read from disk; keep that off the main thread.
@@ -390,6 +397,7 @@ pub fn run() {
             set_offline_map_style,
             airspaces,
             set_hidden_airspace,
+            airspaces_at,
             get_map_source,
             set_map_source,
             map_regions,

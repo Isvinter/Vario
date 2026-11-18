@@ -218,6 +218,26 @@ impl Airspace {
             .and_then(category_of_kind)
             .unwrap_or_else(|| category_of_class(&self.class))
     }
+
+    /// Whether a position lies inside the outline (horizontally; the limits are not
+    /// checked). Treats latitude and longitude as plane coordinates, which is exact enough
+    /// for airspaces of a few dozen kilometres away from the poles and the 180° meridian.
+    pub fn contains(&self, lat_deg: f64, lon_deg: f64) -> bool {
+        // Ray casting: count how often a line from the position to the east crosses the
+        // outline; an odd count means inside.
+        let mut inside = false;
+        let points = &self.outline;
+        for (i, &(lat_a, lon_a)) in points.iter().enumerate() {
+            let (lat_b, lon_b) = points[(i + 1) % points.len()];
+            if (lat_a > lat_deg) != (lat_b > lat_deg) {
+                let lon_cross = lon_a + (lat_deg - lat_a) / (lat_b - lat_a) * (lon_b - lon_a);
+                if lon_cross > lon_deg {
+                    inside = !inside;
+                }
+            }
+        }
+        inside
+    }
 }
 
 /// Category from the type (`AY`) of the OpenAir 2 format; `None` for types such as TMA
@@ -683,6 +703,30 @@ mod tests {
                 "{class} {kind:?}"
             );
         }
+    }
+
+    #[test]
+    fn finds_positions_inside_the_outline() {
+        // An L shape: the notch at the north-east is outside.
+        let file = parse(
+            b"AC D\nAN L\nAL GND\nAH FL100\n\
+              DP 47:00:00 N 011:00:00 E\nDP 47:00:00 N 011:20:00 E\nDP 47:10:00 N 011:20:00 E\n\
+              DP 47:10:00 N 011:10:00 E\nDP 47:20:00 N 011:10:00 E\nDP 47:20:00 N 011:00:00 E\n",
+        );
+        let l = &file.airspaces[0];
+        assert!(l.contains(47.05, 11.05));
+        assert!(l.contains(47.05, 11.3 - 0.15));
+        assert!(l.contains(47.3, 11.05));
+        assert!(!l.contains(47.25, 11.25), "in the notch");
+        assert!(!l.contains(46.9, 11.05), "south of it");
+        assert!(!l.contains(47.05, 11.4), "east of it");
+        // A circle: inside at 2 NM, outside at 3 NM from the centre.
+        let file = parse(b"AC R\nAN C\nAL GND\nAH FL100\nV X=47:30:00 N 011:30:00 E\nDC 2.5\n");
+        let circle = &file.airspaces[0];
+        let near = geo::destination(47.5, 11.5, 30.0, 2.0 * NAUTICAL_MILE_M);
+        let far = geo::destination(47.5, 11.5, 30.0, 3.0 * NAUTICAL_MILE_M);
+        assert!(circle.contains(near.0, near.1));
+        assert!(!circle.contains(far.0, far.1));
     }
 
     #[test]
