@@ -8,6 +8,7 @@ mod audio;
 mod maps;
 mod session_marker;
 mod settings;
+mod share;
 #[cfg(desktop)]
 mod sim;
 mod smoke;
@@ -195,6 +196,41 @@ fn set_offline_map_style(app: AppHandle, style: maps::OfflineStyle) -> Result<()
     maps::save_style(&app, style)
 }
 
+/// The address of the desktop's share; empty if none is set.
+#[tauri::command]
+fn get_map_source(app: AppHandle) -> String {
+    share::load_source(&app)
+}
+
+/// Saves the address of the desktop's share and returns it as stored.
+#[tauri::command]
+fn set_map_source(app: AppHandle, source: String) -> Result<String, String> {
+    share::save_source(&app, &source)
+}
+
+/// Regions on this device and on offer from the desktop. `async`: reading the
+/// desktop's catalog can take a while.
+#[tauri::command]
+async fn map_regions(app: AppHandle) -> Result<share::RegionList, String> {
+    share::regions(&app)
+}
+
+/// Starts downloading a region from the desktop; progress comes as events.
+#[tauri::command]
+fn download_region(app: AppHandle, id: String) -> Result<(), String> {
+    share::start_download(&app, id)
+}
+
+#[tauri::command]
+fn cancel_region_download(app: AppHandle, id: String) {
+    share::cancel_download(&app, &id);
+}
+
+#[tauri::command]
+async fn delete_region(app: AppHandle, id: String) -> Result<(), String> {
+    share::delete(&app, &id)
+}
+
 #[tauri::command]
 fn get_settings(state: State<'_, AppState>) -> SettingsDto {
     (*state.settings()).into()
@@ -310,6 +346,7 @@ pub fn run() {
         .plugin(tauri_plugin_vario_sensors::init())
         .manage(AppState::default())
         .manage(maps::Maps::default())
+        .manage(share::Downloads::default())
         .register_asynchronous_uri_scheme_protocol(maps::SCHEME, |context, request, responder| {
             // Tiles are read from disk; keep that off the main thread.
             let app = context.app_handle().clone();
@@ -337,6 +374,12 @@ pub fn run() {
             interrupted_session,
             offline_maps,
             set_offline_map_style,
+            get_map_source,
+            set_map_source,
+            map_regions,
+            download_region,
+            cancel_region_download,
+            delete_region,
             dismiss_interrupted_session,
             smoke::smoke_report
         ])

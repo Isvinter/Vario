@@ -4324,6 +4324,7 @@ dependencies = [
  "sensor-sim",
  "serde",
  "serde_json",
+ "sha2 0.11.1",
  "tauri",
  "tauri-build",
  "tauri-plugin-vario-sensors",

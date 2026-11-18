@@ -4,7 +4,8 @@
 //! A region is a folder with `manifest.json` and PMTiles files (base map, elevation,
 //! contour lines, ...), built by the outdoor_app's region builder. Regions are copied
 //! into the `maps` folder next to `flights` (on iOS visible in the "Files" app, filled
-//! from the Mac with the Finder).
+//! from the Mac with the Finder), or downloaded from the outdoor_app on the desktop over
+//! the home network (see `share`).
 //!
 //! The map asks for tiles through the URI scheme `tiles`, answered here in Rust:
 //!
