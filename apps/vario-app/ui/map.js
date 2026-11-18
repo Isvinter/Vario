@@ -69,6 +69,52 @@ const FlightMap = (() => {
       c.stroke();
       c.fillStyle = "#fff";
       c.fillRect(7, 14, 18, 4);
+    } else if (name === "fly-takeoff" || name === "fly-training") {
+      // Takeoff: green triangle with a white edge (training hill: lighter green).
+      c.beginPath();
+      c.moveTo(16, 3);
+      c.lineTo(29, 27);
+      c.lineTo(3, 27);
+      c.closePath();
+      c.stroke();
+      c.fillStyle = name === "fly-takeoff" ? "#1f8a24" : "#6cbf4f";
+      c.fill();
+    } else if (name === "fly-landing" || name === "fly-toplanding") {
+      // Landing: yellow circle with "L" (top landing: "T").
+      c.beginPath();
+      c.arc(16, 16, 12, 0, 2 * Math.PI);
+      c.fillStyle = "#f2c200";
+      c.fill();
+      c.strokeStyle = "#6b4e00";
+      c.lineWidth = 2;
+      c.stroke();
+      c.fillStyle = "#3d2c00";
+      c.font = "bold 17px sans-serif";
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.fillText(name === "fly-landing" ? "L" : "T", 16, 17);
+    } else if (name === "fly-site") {
+      // Flying site of unknown kind: grey circle with a white edge.
+      c.beginPath();
+      c.arc(16, 16, 10, 0, 2 * Math.PI);
+      c.stroke();
+      c.fillStyle = "#6e6e6e";
+      c.fill();
+    } else if (name === "fly-obstacle") {
+      // Aviation obstacle symbol: an inverted V with a dot at its foot, dark on a white edge.
+      for (const color of ["#fff", "#1a1a1a"]) {
+        c.strokeStyle = color;
+        c.fillStyle = color;
+        c.lineWidth = color === "#fff" ? 6 : 3;
+        c.beginPath();
+        c.moveTo(6, 28);
+        c.lineTo(16, 4);
+        c.lineTo(26, 28);
+        c.stroke();
+        c.beginPath();
+        c.arc(16, 24, color === "#fff" ? 4.5 : 3, 0, 2 * Math.PI);
+        c.fill();
+      }
     } else {
       return null;
     }

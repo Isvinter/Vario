@@ -25,7 +25,7 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 | 4 | Aufzeichnung, Flugliste | freigegeben (geprüft auf macOS und im iOS-Simulator; auf Linux nicht geprüft) |
 | 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | in Arbeit (Sensorbrücke, Hintergrund, Audio-Session-Kategorie schon aus 2b; zuerst Audio-Unterbrechungen) |
 | 6 | Offline-Karten: Regionspakete der outdoor_app (`core-maps` per Git), Kachel-Schema `tiles://`, Topo-Stil | in Arbeit (Anzeige offline und Flugkarte auf dem iPhone geprüft; offen: Stromleitungen und Start-/Landeplätze über den Region-Builder der outdoor_app – dann Stromleitungen dünn gestrichelt, Seilbahnen dicker und durchgehend) |
-| 6b | Fertiger Flugstil mit dem neuen Flug-Layer des Region-Builders (Stromleitungen dünn gestrichelt, Seilbahnen dicker und durchgehend, Start-/Landeplätze); Regionen per WLAN von der outdoor_app (Linux-Desktop, `core-share`) auf die Vario-App (iOS) übertragen | als Nächstes (vor Phase 7) |
+| 6b | Fertiger Flugstil mit dem neuen Flug-Layer des Region-Builders (Stromleitungen dünn gestrichelt, Seilbahnen dicker und durchgehend, Start-/Landeplätze); Regionen per WLAN von der outdoor_app (Linux-Desktop, `core-share`) auf die Vario-App (iOS) übertragen | in Arbeit (Flugstil mit Layer `flying` fertig, auf macOS geprüft, auf dem iPhone noch nicht; Regionen ohne `flying` zeigen keine Seilbahnen mehr, also neu bauen; offen: WLAN-Übertragung) |
 | 7 | Lufträume: Format einlesen (`flight-core`), Anzeige auf der Karte, später Warnungen; Datenquelle noch offen (openAIP oder OpenAir) | offen |
 
 Den Status hier nach jeder Freigabe aktualisieren.

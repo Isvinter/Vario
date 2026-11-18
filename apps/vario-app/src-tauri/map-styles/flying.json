@@ -701,19 +701,116 @@
    }
   },
   {
-   "id": "aerialway",
+   "id": "fly-power-minor",
    "type": "line",
-   "source": "basemap",
-   "source-layer": "transportation",
+   "source": "outdoor",
+   "source-layer": "flying",
+   "minzoom": 12,
+   "filter": [
+    "in",
+    [
+     "get",
+     "kind"
+    ],
+    [
+     "literal",
+     [
+      "power_minor_line",
+      "power_cable"
+     ]
+    ]
+   ],
+   "layout": {
+    "line-cap": "butt",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#4a4a4a",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     12,
+     0.6,
+     15,
+     1.1
+    ],
+    "line-dasharray": [
+     3,
+     3
+    ]
+   }
+  },
+  {
+   "id": "fly-power-line",
+   "type": "line",
+   "source": "outdoor",
+   "source-layer": "flying",
    "minzoom": 10,
    "filter": [
     "==",
     [
      "get",
-     "class"
+     "kind"
     ],
-    "aerialway"
+    "power_line"
    ],
+   "layout": {
+    "line-cap": "butt",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#2b2b2b",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     10,
+     0.7,
+     15,
+     1.6
+    ],
+    "line-dasharray": [
+     4,
+     3
+    ]
+   }
+  },
+  {
+   "id": "fly-aerialway-drag",
+   "type": "line",
+   "source": "outdoor",
+   "source-layer": "flying",
+   "minzoom": 12,
+   "filter": [
+    "in",
+    [
+     "get",
+     "kind"
+    ],
+    [
+     "literal",
+     [
+      "drag_lift",
+      "t-bar",
+      "j-bar",
+      "platter",
+      "rope_tow"
+     ]
+    ]
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
    "paint": {
     "line-color": "#d01c1c",
     "line-width": [
@@ -724,18 +821,62 @@
      [
       "zoom"
      ],
-     10,
-     1.2,
+     12,
+     1.0,
      15,
-     2.6
-    ],
-    "line-dasharray": [
-     3,
-     1.5
+     2.0
     ]
-   },
+   }
+  },
+  {
+   "id": "fly-aerialway",
+   "type": "line",
+   "source": "outdoor",
+   "source-layer": "flying",
+   "minzoom": 11,
+   "filter": [
+    "!",
+    [
+     "in",
+     [
+      "get",
+      "kind"
+     ],
+     [
+      "literal",
+      [
+       "power_line",
+       "power_minor_line",
+       "power_cable",
+       "drag_lift",
+       "t-bar",
+       "j-bar",
+       "platter",
+       "rope_tow",
+       "magic_carpet"
+      ]
+     ]
+    ]
+   ],
    "layout": {
-    "line-cap": "butt"
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#d01c1c",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     11,
+     1.8,
+     15,
+     3.5
+    ]
    }
   },
   {
@@ -814,6 +955,118 @@
    "paint": {
     "text-color": "#8a5a26",
     "text-halo-color": "rgba(245,242,232,0.9)",
+    "text-halo-width": 1.2
+   }
+  },
+  {
+   "id": "fly-power-label",
+   "type": "symbol",
+   "source": "outdoor",
+   "source-layer": "flying",
+   "minzoom": 14,
+   "filter": [
+    "all",
+    [
+     "==",
+     [
+      "get",
+      "kind"
+     ],
+     "power_line"
+    ],
+    [
+     ">",
+     [
+      "coalesce",
+      [
+       "get",
+       "voltage"
+      ],
+      0
+     ],
+     0
+    ]
+   ],
+   "layout": {
+    "symbol-placement": "line",
+    "symbol-spacing": 400,
+    "text-field": [
+     "concat",
+     [
+      "to-string",
+      [
+       "get",
+       "voltage"
+      ]
+     ],
+     " kV"
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": 10,
+    "text-offset": [
+     0,
+     -0.7
+    ]
+   },
+   "paint": {
+    "text-color": "#2b2b2b",
+    "text-halo-color": "rgba(255,255,255,0.9)",
+    "text-halo-width": 1.2
+   }
+  },
+  {
+   "id": "fly-aerialway-label",
+   "type": "symbol",
+   "source": "outdoor",
+   "source-layer": "flying",
+   "minzoom": 14,
+   "filter": [
+    "all",
+    [
+     "!",
+     [
+      "in",
+      [
+       "get",
+       "kind"
+      ],
+      [
+       "literal",
+       [
+        "power_line",
+        "power_minor_line",
+        "power_cable",
+        "magic_carpet"
+       ]
+      ]
+     ]
+    ],
+    [
+     "has",
+     "name"
+    ]
+   ],
+   "layout": {
+    "symbol-placement": "line",
+    "symbol-spacing": 400,
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": 10,
+    "text-offset": [
+     0,
+     -0.8
+    ]
+   },
+   "paint": {
+    "text-color": "#a01414",
+    "text-halo-color": "rgba(255,255,255,0.9)",
     "text-halo-width": 1.2
    }
   },
@@ -1365,6 +1618,254 @@
     "text-color": "#222",
     "text-halo-color": "rgba(255,255,255,0.9)",
     "text-halo-width": 1.6
+   }
+  },
+  {
+   "id": "fly-obstacle",
+   "type": "symbol",
+   "source": "outdoor",
+   "source-layer": "flying",
+   "minzoom": 13,
+   "filter": [
+    "all",
+    [
+     "in",
+     [
+      "get",
+      "kind"
+     ],
+     [
+      "literal",
+      [
+       "mast",
+       "tower",
+       "chimney",
+       "wind_turbine"
+      ]
+     ]
+    ],
+    [
+     ">=",
+     [
+      "coalesce",
+      [
+       "get",
+       "height"
+      ],
+      100
+     ],
+     10
+    ]
+   ],
+   "layout": {
+    "icon-image": "fly-obstacle",
+    "icon-size": 0.9,
+    "text-field": [
+     "step",
+     [
+      "zoom"
+     ],
+     "",
+     14,
+     [
+      "case",
+      [
+       "has",
+       "height"
+      ],
+      [
+       "concat",
+       [
+        "to-string",
+        [
+         "get",
+         "height"
+        ]
+       ],
+       " m"
+      ],
+      ""
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": 10,
+    "text-anchor": "left",
+    "text-offset": [
+     0.7,
+     0
+    ],
+    "text-optional": true
+   },
+   "paint": {
+    "text-color": "#1a1a1a",
+    "text-halo-color": "rgba(255,255,255,0.9)",
+    "text-halo-width": 1.2
+   }
+  },
+  {
+   "id": "fly-site",
+   "type": "symbol",
+   "source": "outdoor",
+   "source-layer": "flying",
+   "minzoom": 9,
+   "filter": [
+    "in",
+    [
+     "get",
+     "kind"
+    ],
+    [
+     "literal",
+     [
+      "takeoff",
+      "landing",
+      "toplanding",
+      "training",
+      "site"
+     ]
+    ]
+   ],
+   "layout": {
+    "icon-image": [
+     "match",
+     [
+      "get",
+      "kind"
+     ],
+     "takeoff",
+     "fly-takeoff",
+     "landing",
+     "fly-landing",
+     "toplanding",
+     "fly-toplanding",
+     "training",
+     "fly-training",
+     "fly-site"
+    ],
+    "icon-size": [
+     "match",
+     [
+      "get",
+      "kind"
+     ],
+     [
+      "takeoff",
+      "landing"
+     ],
+     1,
+     0.8
+    ],
+    "icon-allow-overlap": true,
+    "symbol-sort-key": [
+     "match",
+     [
+      "get",
+      "kind"
+     ],
+     "takeoff",
+     0,
+     "landing",
+     1,
+     2
+    ],
+    "text-field": [
+     "step",
+     [
+      "zoom"
+     ],
+     [
+      "format",
+      "",
+      {}
+     ],
+     11,
+     [
+      "case",
+      [
+       "all",
+       [
+        "==",
+        [
+         "get",
+         "kind"
+        ],
+        "takeoff"
+       ],
+       [
+        "has",
+        "direction"
+       ]
+      ],
+      [
+       "format",
+       [
+        "coalesce",
+        [
+         "get",
+         "name"
+        ],
+        ""
+       ],
+       {},
+       "\n",
+       {},
+       [
+        "get",
+        "direction"
+       ],
+       {
+        "font-scale": 0.85
+       }
+      ],
+      [
+       "format",
+       [
+        "coalesce",
+        [
+         "get",
+         "name"
+        ],
+        ""
+       ],
+       {}
+      ]
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Bold"
+    ],
+    "text-size": 11,
+    "text-anchor": "top",
+    "text-offset": [
+     0,
+     0.9
+    ],
+    "text-optional": true,
+    "text-max-width": 8
+   },
+   "paint": {
+    "text-color": [
+     "match",
+     [
+      "get",
+      "kind"
+     ],
+     [
+      "takeoff",
+      "training"
+     ],
+     "#1d5e20",
+     [
+      "landing",
+      "toplanding"
+     ],
+     "#6b4e00",
+     "#444444"
+    ],
+    "text-halo-color": "rgba(255,255,255,0.9)",
+    "text-halo-width": 1.4
    }
   }
  ]
