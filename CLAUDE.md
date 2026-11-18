@@ -24,7 +24,7 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 | 3 | App auf Linux (Instrumente, Einstellungen, Karte) | freigegeben (geprüft auf macOS und im iOS-Simulator; auf Linux seit Phase 2b nicht mehr geprüft) |
 | 4 | Aufzeichnung, Flugliste | freigegeben (geprüft auf macOS und im iOS-Simulator; auf Linux nicht geprüft) |
 | 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | in Arbeit (Sensorbrücke, Hintergrund, Audio-Session-Kategorie schon aus 2b; zuerst Audio-Unterbrechungen) |
-| 6 | Offline-Karten: Regionspakete der outdoor_app (`core-maps` per Git), Kachel-Schema `tiles://`, Topo-Stil | in Arbeit (Anzeige offline auf dem iPhone geprüft) |
+| 6 | Offline-Karten: Regionspakete der outdoor_app (`core-maps` per Git), Kachel-Schema `tiles://`, Topo-Stil | in Arbeit (Anzeige offline und Flugkarte auf dem iPhone geprüft; offen: Stromleitungen und Start-/Landeplätze über den Region-Builder der outdoor_app – dann Stromleitungen dünn gestrichelt, Seilbahnen dicker und durchgehend) |
 | 7 | Lufträume: Format einlesen (`flight-core`), Anzeige auf der Karte, später Warnungen; Datenquelle noch offen (openAIP oder OpenAir) | offen |
 
 Den Status hier nach jeder Freigabe aktualisieren.

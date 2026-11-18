@@ -28,6 +28,53 @@ const FlightMap = (() => {
   let onFollowChange = () => {};
   let onMessage = () => {};
 
+  /** Map symbols by name, drawn on a canvas; `null` for unknown names. */
+  function drawSymbol(name) {
+    const size = 32; // drawn at pixel ratio 2: 16 px on the map
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const c = canvas.getContext("2d");
+    c.lineJoin = "round";
+    c.lineWidth = 3;
+    c.strokeStyle = "#fff";
+    if (name === "peak") {
+      // Black triangle with a white edge.
+      c.beginPath();
+      c.moveTo(16, 4);
+      c.lineTo(28, 26);
+      c.lineTo(4, 26);
+      c.closePath();
+      c.stroke();
+      c.fillStyle = "#2b2216";
+      c.fill();
+    } else if (name === "saddle") {
+      // A small "pass" mark: two arcs facing each other, dark on a white edge.
+      for (const color of ["#fff", "#3d3020"]) {
+        c.strokeStyle = color;
+        c.lineWidth = color === "#fff" ? 6 : 3;
+        c.beginPath();
+        c.arc(16, 2, 12, 0.35 * Math.PI, 0.65 * Math.PI);
+        c.stroke();
+        c.beginPath();
+        c.arc(16, 30, 12, 1.35 * Math.PI, 1.65 * Math.PI);
+        c.stroke();
+      }
+    } else if (name === "aerodrome") {
+      // Blue circle with a runway bar.
+      c.beginPath();
+      c.arc(16, 16, 11, 0, 2 * Math.PI);
+      c.fillStyle = "#1a3f8f";
+      c.fill();
+      c.stroke();
+      c.fillStyle = "#fff";
+      c.fillRect(7, 14, 18, 4);
+    } else {
+      return null;
+    }
+    return c.getImageData(0, 0, size, size);
+  }
+
   function markerElement() {
     const element = document.createElement("div");
     element.className = "position-marker";
@@ -112,6 +159,12 @@ const FlightMap = (() => {
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
     map.on("style.load", addTrackLayers);
+    // The offline styles use a few symbols that are drawn here instead of being
+    // loaded from a sprite file.
+    map.on("styleimagemissing", (event) => {
+      const image = drawSymbol(event.id);
+      if (image && !map.hasImage(event.id)) map.addImage(event.id, image, { pixelRatio: 2 });
+    });
     // A flight chosen before the map existed: show it once the map has its size.
     map.once("load", fitSavedFlight);
     // Moving the map by hand stops following; the "Folgen" button turns it back on.

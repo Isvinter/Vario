@@ -36,9 +36,58 @@ const TILES_BASE: &str = "tiles://localhost/";
 /// Where the glyph files live among the bundled frontend assets (`ui/map/fonts`).
 const FONT_ASSETS: &str = "map/fonts/";
 
-/// The map style for installed regions, with placeholders for tile and font URLs.
-/// Taken from the outdoor_app (`styles/topo-summer.json`).
+/// The map styles for installed regions, with placeholders for tile and font URLs.
+/// Topo is the outdoor_app's hiking map (`styles/topo-summer.json`); the flying map is
+/// derived from it: strong terrain, peaks, few details, obstacles stand out.
+const FLYING_STYLE: &str = include_str!("../map-styles/flying.json");
 const TOPO_STYLE: &str = include_str!("../map-styles/topo-summer.json");
+
+/// File in the config folder holding the chosen offline style.
+const STYLE_FILE_NAME: &str = "offline-map-style.txt";
+
+/// Which of the offline styles to show.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OfflineStyle {
+    #[default]
+    Flying,
+    Topo,
+}
+
+impl OfflineStyle {
+    fn name(self) -> &'static str {
+        match self {
+            OfflineStyle::Flying => "flying",
+            OfflineStyle::Topo => "topo",
+        }
+    }
+
+    fn template(self) -> &'static str {
+        match self {
+            OfflineStyle::Flying => FLYING_STYLE,
+            OfflineStyle::Topo => TOPO_STYLE,
+        }
+    }
+}
+
+/// The chosen offline style; the flying map unless the user picked another.
+pub fn load_style(app: &AppHandle) -> OfflineStyle {
+    let text = crate::settings::config_file(app, STYLE_FILE_NAME)
+        .ok()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .unwrap_or_default();
+    match text.trim() {
+        "topo" => OfflineStyle::Topo,
+        _ => OfflineStyle::Flying,
+    }
+}
+
+pub fn save_style(app: &AppHandle, style: OfflineStyle) -> Result<(), String> {
+    crate::settings::write_file(
+        crate::settings::config_file(app, STYLE_FILE_NAME)?,
+        style.name(),
+    )
+}
 
 /// The installed regions. Read again whenever the map style is requested, so regions
 /// copied in while the app runs show up when the map is opened.
@@ -67,6 +116,8 @@ pub struct OfflineMaps {
     /// The folder to copy regions into.
     pub dir: Option<String>,
     pub regions: Vec<RegionInfo>,
+    /// Which offline style `style` is.
+    pub variant: OfflineStyle,
     /// The filled-in map style (JSON), or `None` without installed regions.
     pub style: Option<String>,
 }
@@ -78,10 +129,12 @@ pub fn dir(app: &AppHandle) -> Option<PathBuf> {
 
 /// Reads the regions folder again and returns the regions and the style for them.
 pub fn reload(app: &AppHandle) -> Result<OfflineMaps, String> {
+    let variant = load_style(app);
     let Some(dir) = dir(app) else {
         return Ok(OfflineMaps {
             dir: None,
             regions: Vec::new(),
+            variant,
             style: None,
         });
     };
@@ -127,7 +180,10 @@ pub fn reload(app: &AppHandle) -> Result<OfflineMaps, String> {
             attribution: &attribution,
             contours: Contours::Tiles,
         };
-        Some(core_maps::offline_style(TOPO_STYLE, &options).map_err(|error| error.to_string())?)
+        Some(
+            core_maps::offline_style(variant.template(), &options)
+                .map_err(|error| error.to_string())?,
+        )
     };
 
     *app.state::<Maps>()
@@ -137,6 +193,7 @@ pub fn reload(app: &AppHandle) -> Result<OfflineMaps, String> {
     Ok(OfflineMaps {
         dir: Some(dir.to_string_lossy().into_owned()),
         regions,
+        variant,
         style,
     })
 }

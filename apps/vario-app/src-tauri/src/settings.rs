@@ -52,7 +52,7 @@ impl From<SettingsDto> for VarioSettings {
     }
 }
 
-fn config_file(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
+pub(crate) fn config_file(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
     app.path()
         .app_config_dir()
         .map(|dir| dir.join(name))
@@ -115,7 +115,7 @@ fn checked_map_style(url: &str) -> Result<String, String> {
     }
 }
 
-fn write_file(path: PathBuf, text: &str) -> Result<(), String> {
+pub(crate) fn write_file(path: PathBuf, text: &str) -> Result<(), String> {
     let describe = |error: std::io::Error| format!("could not save settings: {error}");
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(describe)?;

@@ -476,7 +476,25 @@ $("follow").addEventListener("click", () => FlightMap.toggleFollow());
 let onlineStyleUrl = null;
 let currentStyle = null;
 
+function showOfflineStyle(variant) {
+  for (const button of document.querySelectorAll("#offline-style button")) {
+    button.classList.toggle("on", button.dataset.style === variant);
+  }
+}
+
+for (const button of document.querySelectorAll("#offline-style button")) {
+  button.addEventListener("click", async () => {
+    try {
+      await invoke("set_offline_map_style", { style: button.dataset.style });
+      await updateMapStyle();
+    } catch (error) {
+      $("settings-message").textContent = "Nicht übernommen: " + error;
+    }
+  });
+}
+
 function showRegions(maps) {
+  showOfflineStyle(maps.variant);
   const list = $("regions");
   list.replaceChildren(
     ...maps.regions.map((region) => {

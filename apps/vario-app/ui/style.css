@@ -207,6 +207,10 @@ body {
 #interrupted .button {
   width: 100%;
 }
+#offline-style .button.on {
+  background: var(--ink);
+  color: var(--paper);
+}
 #permissions {
   margin-bottom: 12px;
   padding: 8px 12px 12px;

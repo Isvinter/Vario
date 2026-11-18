@@ -189,6 +189,12 @@ async fn offline_maps(app: AppHandle) -> Result<maps::OfflineMaps, String> {
     maps::reload(&app)
 }
 
+/// Chooses the offline map style (flying or topo) and saves the choice.
+#[tauri::command]
+fn set_offline_map_style(app: AppHandle, style: maps::OfflineStyle) -> Result<(), String> {
+    maps::save_style(&app, style)
+}
+
 #[tauri::command]
 fn get_settings(state: State<'_, AppState>) -> SettingsDto {
     (*state.settings()).into()
@@ -330,6 +336,7 @@ pub fn run() {
             open_settings,
             interrupted_session,
             offline_maps,
+            set_offline_map_style,
             dismiss_interrupted_session,
             smoke::smoke_report
         ])
