@@ -4,6 +4,7 @@
 //! from the system clock: every sensor sample carries its own [`time::Timestamp`], which
 //! keeps replay, accelerated simulation and tests deterministic.
 
+pub mod airspace;
 pub mod atmosphere;
 pub mod flightlog;
 pub mod geo;

@@ -33,9 +33,34 @@ pub fn offset_position(lat_deg: f64, lon_deg: f64, north_m: f64, east_m: f64) ->
     (lat, lon)
 }
 
+/// Position reached by travelling `distance_m` metres from a position along the great
+/// circle that starts with course `bearing_deg`. Returns `(latitude_deg, longitude_deg)`.
+pub fn destination(lat_deg: f64, lon_deg: f64, bearing_deg: f64, distance_m: f64) -> (f64, f64) {
+    let lat1 = lat_deg.to_radians();
+    let bearing = bearing_deg.to_radians();
+    let angle = distance_m / EARTH_RADIUS_M;
+    let lat2 = (lat1.sin() * angle.cos() + lat1.cos() * angle.sin() * bearing.cos()).asin();
+    let d_lon =
+        (bearing.sin() * angle.sin() * lat1.cos()).atan2(angle.cos() - lat1.sin() * lat2.sin());
+    let lon2 = (lon_deg.to_radians() + d_lon).to_degrees();
+    // Keep the longitude in -180..180.
+    (lat2.to_degrees(), (lon2 + 540.0).rem_euclid(360.0) - 180.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn destination_matches_distance_and_bearing() {
+        for bearing in [0.0, 45.0, 90.0, 200.0, 315.0] {
+            let (lat, lon) = destination(47.6, 11.5, bearing, 9_260.0);
+            let d = distance_m(47.6, 11.5, lat, lon);
+            let b = bearing_deg(47.6, 11.5, lat, lon);
+            assert!((d - 9_260.0).abs() < 0.01, "{d}");
+            assert!((b - bearing).abs() < 1e-6, "{b}");
+        }
+    }
 
     #[test]
     fn one_degree_of_latitude_is_about_111_km() {
