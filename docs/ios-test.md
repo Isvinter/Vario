@@ -302,6 +302,27 @@ Die UDID liefert `xcrun devicectl list devices`.
     --source <region-ordner>/ --destination Documents/maps/<region-id>
   ```
 
+### Regionen per WLAN vom Desktop laden
+
+Die Freigabe der outdoor_app (Linux-Desktop) liefert die Regionen, die Vario-App lädt sie
+unter Einstellungen → Offline-Karten → „Desktop im WLAN“. Ohne Linux-Rechner tut es
+auch `share-serve` aus der outdoor_app auf dem Mac (Befehl in `CLAUDE.md`); dann die
+WLAN-Adresse des Macs eintragen (`ipconfig getifaddr en0`), Port 8765.
+
+Im Simulator geprüft (Download, Anzeige auf der Karte); auf dem iPhone zu prüfen:
+
+1. Adresse eintragen, „Verbinden“: iOS fragt einmal nach dem **lokalen Netzwerk**
+   („Lädt Kartenregionen …“) – erlauben. Abgelehnt: in den iOS-Einstellungen unter
+   Vario → Lokales Netzwerk einschalten.
+2. „Laden“: Fortschrittsbalken läuft, danach „… ist geladen.“ und die Karte zeigt die
+   Region.
+3. Während des Ladens „Abbrechen“, dann wieder „Laden“: setzt an derselben Stelle fort.
+4. Während des Ladens den Bildschirm sperren und wieder entsperren: Lädt es weiter, oder
+   kommt „Verbindung zum Desktop unterbrochen“? Danach „Laden“ setzt fort.
+5. Ist auf dem Desktop eine neuere Version gebaut: „Update auf dem Desktop“ und
+   „Aktualisieren“.
+6. „Löschen“ (zweimal tippen): Region verschwindet aus Liste, Karte und App „Dateien“.
+
 ## 6. Bewertung
 
 | Ergebnis | Folge |

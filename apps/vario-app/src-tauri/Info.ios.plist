@@ -23,5 +23,12 @@
     <true/>
     <key>LSSupportsOpeningDocumentsInPlace</key>
     <true/>
+
+    <!-- Downloading map regions from the outdoor_app on the desktop in the home
+         network: the text of the local network permission dialog iOS shows on the
+         first connection. (No App Transport Security exception is needed: the download
+         runs in Rust on plain sockets, which ATS does not cover.) -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Lädt Kartenregionen von der outdoor_app am Computer im Heimnetz.</string>
 </dict>
 </plist>

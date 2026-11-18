@@ -55,5 +55,7 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Lädt Kartenregionen von der outdoor_app am Computer im Heimnetz.</string>
 </dict>
 </plist>
