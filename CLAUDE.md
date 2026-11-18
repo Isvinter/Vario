@@ -25,6 +25,7 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 | 4 | Aufzeichnung, Flugliste | freigegeben (geprüft auf macOS und im iOS-Simulator; auf Linux nicht geprüft) |
 | 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | in Arbeit (Sensorbrücke, Hintergrund, Audio-Session-Kategorie schon aus 2b; zuerst Audio-Unterbrechungen) |
 | 6 | Offline-Karten: Regionspakete der outdoor_app (`core-maps` per Git), Kachel-Schema `tiles://`, Topo-Stil | in Arbeit (Anzeige offline und Flugkarte auf dem iPhone geprüft; offen: Stromleitungen und Start-/Landeplätze über den Region-Builder der outdoor_app – dann Stromleitungen dünn gestrichelt, Seilbahnen dicker und durchgehend) |
+| 6b | Fertiger Flugstil mit dem neuen Flug-Layer des Region-Builders (Stromleitungen dünn gestrichelt, Seilbahnen dicker und durchgehend, Start-/Landeplätze); Regionen per WLAN von der outdoor_app (Linux-Desktop, `core-share`) auf die Vario-App (iOS) übertragen | als Nächstes (vor Phase 7) |
 | 7 | Lufträume: Format einlesen (`flight-core`), Anzeige auf der Karte, später Warnungen; Datenquelle noch offen (openAIP oder OpenAir) | offen |
 
 Den Status hier nach jeder Freigabe aktualisieren.
@@ -153,6 +154,10 @@ Der Selbsttest schreibt seine Flüge in einen temporären Ordner.
 
 Einstellungen liegen als Textdatei (`settings.txt`, Kartenstil in `map-style.txt`) im
 Konfigurationsordner der App; das Format definiert `flight-core`.
+
+Prüfen auf dem iPhone am Kabel: Gerätelog live mit `idevicesyslog` (Meldungen aus Swift
+beginnen mit `vario:`), Absturz nachstellen mit `devicectl … process terminate --kill`,
+Regionen kopieren mit `devicectl … copy to`; Befehle in `docs/ios-test.md`, Abschnitt 5.
 
 Rust ist per `rustup` im Home-Verzeichnis installiert (`~/.cargo/bin`). Auf dem Mac läuft
 die Shell von Claude Code unter Rosetta; die Toolchain ist trotzdem nativ arm64

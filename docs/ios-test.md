@@ -272,8 +272,35 @@ xcrun devicectl device copy from --device <UDID> --domain-type appDataContainer 
   --domain-identifier de.vario.prototyp.flugcomputer \
   --source Documents/logs --destination testdata/ios
 ```
- Die
-Rohdaten sind die Grundlage, um den Vario-Filter auf echte Sensoren abzustimmen.
+
+Die Rohdaten sind die Grundlage, um den Vario-Filter auf echte Sensoren abzustimmen.
+
+### Weitere Prüfwege am Kabel
+
+Die UDID liefert `xcrun devicectl list devices`.
+
+- **Gerätelog live mitschneiden** (die Meldungen aus Swift beginnen mit `vario:`; das Log
+  lässt sich nur live lesen, nicht nachträglich): `idevicesyslog` aus Homebrew
+  (`libimobiledevice`):
+  ```sh
+  idevicesyslog -u <UDID> | grep --line-buffered "vario:"
+  ```
+  Für Gründe, die iOS selbst meldet (z. B. warum die Audio-Session nicht aktiviert
+  wird), ungefiltert mitschneiden und danach nach `Vario(` suchen; das ungefilterte Log
+  wird schnell sehr groß.
+- **Absturz nachstellen** (die App bekommt keine Gelegenheit mehr zu speichern, wie bei
+  Speichermangel oder leerem Akku):
+  ```sh
+  xcrun devicectl device info processes --device <UDID> | grep Vario.app
+  xcrun devicectl device process terminate --device <UDID> --pid <PID> --kill
+  ```
+  Wegwischen im App-Umschalter ist dagegen ein geordnetes Ende (die App speichert).
+- **Kartenregion aufs iPhone kopieren** (statt per Finder):
+  ```sh
+  xcrun devicectl device copy to --device <UDID> --domain-type appDataContainer \
+    --domain-identifier de.vario.prototyp.flugcomputer \
+    --source <region-ordner>/ --destination Documents/maps/<region-id>
+  ```
 
 ## 6. Bewertung
 
