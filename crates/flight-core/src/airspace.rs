@@ -27,11 +27,6 @@
 
 use crate::geo;
 
-/// Records this reader understands; others are reported and ignored.
-const RECORDS: &[&str] = &[
-    "AN", "AY", "AF", "AG", "AL", "AH", "DP", "V", "DC", "DA", "DB", "DY", "AT", "SP", "SB", "AX",
-];
-
 /// One foot in metres.
 pub const FOOT_M: f64 = 0.3048;
 /// One nautical mile in metres.
@@ -192,6 +187,10 @@ pub enum Category {
     Rmz,
     /// Gliding sectors and wave windows.
     GliderSector,
+    /// Temporarily reserved for an activity (TRA, TSA). In Austria these are mostly
+    /// areas for gliders, hang gliders and paragliders inside controlled airspace.
+    Reserved,
+    /// Everything else: information sectors, military low flying areas, FIR, ….
     Other,
 }
 
@@ -221,23 +220,31 @@ impl Airspace {
     }
 }
 
+/// Category from the type (`AY`) of the OpenAir 2 format; `None` for types such as TMA
+/// or NONE, where the ICAO class says more.
 fn category_of_kind(kind: &str) -> Option<Category> {
     let category = match kind {
         "CTR" => Category::Ctr,
-        "TMA" | "CTA" => Category::Controlled,
         "TMZ" => Category::Tmz,
-        "RMZ" => Category::Rmz,
-        _ if kind.contains("PROHIBIT") => Category::Prohibited,
-        _ if kind.contains("RESTRICT") => Category::Restricted,
-        _ if kind.contains("DANGER") => Category::Danger,
-        _ if kind.contains("GLIDING") || kind.contains("WAVE") || kind == "GSEC" => {
-            Category::GliderSector
+        // Zones where radio contact is required.
+        "RMZ" | "ATZ" | "MATZ" | "TIZ" | "TIA" | "HTZ" => Category::Rmz,
+        "P" => Category::Prohibited,
+        // OFR: overflight restrictions, e.g. above national parks in Austria.
+        "R" | "OFR" | "TFR" => Category::Restricted,
+        // ASRA: parachute jumping areas.
+        "Q" | "ASRA" | "ALERT" | "WARNING" => Category::Danger,
+        "GSEC" => Category::GliderSector,
+        "TRA" | "TRAFR" | "TSA" => Category::Reserved,
+        "FIS" | "MTA" | "MTR" | "LTA" | "VFRSEC" | "VFRR" | "AWY" | "ADIZ" | "TRZ" => {
+            Category::Other
         }
         _ => return None,
     };
     Some(category)
 }
 
+/// Category from the class (`AC`); also understands the types that older OpenAir files
+/// put there (CTR, R, Q, P, GP, …).
 fn category_of_class(class: &str) -> Category {
     match class {
         "CTR" => Category::Ctr,
@@ -293,13 +300,6 @@ pub fn parse(bytes: &[u8]) -> AirspaceFile {
             draft = Some(Draft::new(line, rest));
             continue;
         }
-        if !RECORDS.contains(&record.as_str()) {
-            file.issues.push(Issue {
-                line,
-                message: format!("unknown record '{record}' ignored"),
-            });
-            continue;
-        }
         let Some(current) = draft.as_mut() else {
             file.issues.push(Issue {
                 line,
@@ -307,9 +307,16 @@ pub fn parse(bytes: &[u8]) -> AirspaceFile {
             });
             continue;
         };
-        if let Err(message) = current.apply(&record, rest) {
-            current.broken = true;
-            file.issues.push(Issue { line, message });
+        match current.apply(&record, rest) {
+            Ok(Record::Used) => {}
+            Ok(Record::Unknown) => file.issues.push(Issue {
+                line,
+                message: format!("unknown record '{record}' ignored"),
+            }),
+            Err(message) => {
+                current.broken = true;
+                file.issues.push(Issue { line, message });
+            }
         }
     }
     if let Some(last) = draft {
@@ -325,6 +332,13 @@ fn decode(bytes: &[u8]) -> String {
         Ok(text) => text.to_string(),
         Err(_) => bytes.iter().map(|&byte| char::from(byte)).collect(),
     }
+}
+
+/// Whether a record was understood.
+enum Record {
+    Used,
+    /// Not part of the format as far as this reader knows; the airspace is kept.
+    Unknown,
 }
 
 /// An airspace while its records are being read.
@@ -362,7 +376,8 @@ impl Draft {
         }
     }
 
-    fn apply(&mut self, record: &str, rest: &str) -> Result<(), String> {
+    /// Uses one record; an error means the airspace is incomplete.
+    fn apply(&mut self, record: &str, rest: &str) -> Result<Record, String> {
         let text = || (!rest.is_empty()).then(|| rest.to_string());
         match record {
             "AN" => self.name = rest.to_string(),
@@ -413,11 +428,12 @@ impl Draft {
                 self.outline.extend(points);
             }
             "DY" => return Err("airways (DY) are not supported".to_string()),
-            // Label positions, display styles and transponder codes are not needed.
-            "AT" | "SP" | "SB" | "AX" => {}
-            _ => unreachable!("records are checked against RECORDS"),
+            // Label positions, display styles, transponder codes and activation times
+            // are not used (yet).
+            "AT" | "SP" | "SB" | "AX" | "AA" => {}
+            _ => return Ok(Record::Unknown),
         }
-        Ok(())
+        Ok(Record::Used)
     }
 
     fn set_variable(&mut self, rest: &str) -> Result<(), String> {
@@ -634,6 +650,42 @@ mod tests {
     }
 
     #[test]
+    fn categories_of_openair_2_types() {
+        let airspace = |class: &str, kind: Option<&str>| Airspace {
+            class: class.to_string(),
+            kind: kind.map(str::to_string),
+            name: String::new(),
+            frequency: None,
+            station: None,
+            lower: Limit::Ground,
+            upper: Limit::Unlimited,
+            outline: Vec::new(),
+        };
+        let cases = [
+            ("D", Some("CTR"), Category::Ctr),
+            ("C", Some("TMA"), Category::Controlled),
+            ("E", Some("TMA"), Category::ClassE),
+            ("E", Some("TMZ"), Category::Tmz),
+            ("E", Some("NONE"), Category::ClassE),
+            ("UNC", Some("R"), Category::Restricted),
+            ("UNC", Some("OFR"), Category::Restricted),
+            ("UNC", Some("ASRA"), Category::Danger),
+            ("UNC", Some("GSEC"), Category::GliderSector),
+            ("UNC", Some("TRA"), Category::Reserved),
+            ("UNC", Some("FIS"), Category::Other),
+            ("UNC", Some("SOMETHING NEW"), Category::Other),
+            ("R", None, Category::Restricted),
+        ];
+        for (class, kind, expected) in cases {
+            assert_eq!(
+                airspace(class, kind).category(),
+                expected,
+                "{class} {kind:?}"
+            );
+        }
+    }
+
+    #[test]
     fn reads_coordinates() {
         let cases = [
             ("47:30:00 N 011:20:00 E", (47.5, 11.0 + 1.0 / 3.0)),
@@ -674,6 +726,7 @@ mod tests {
               AL GND\n\
               AH 3500ft MSL\n\
               SP 0,1,0,0,255\n\
+              AA 2026-01-01T00:01:00Z/2026-12-31T23:00:00Z\n\
               DP 47:40:00 N 011:20:00 E\n\
               DP 47:40:00 N 011:30:00 E\n\
               DP 47:30:00 N 011:30:00 E\n\
