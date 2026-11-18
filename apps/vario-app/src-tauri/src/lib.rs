@@ -5,6 +5,7 @@
 //! On the desktop the sensors are replaced by a simulated flight.
 
 mod audio;
+mod maps;
 mod session_marker;
 mod settings;
 #[cfg(desktop)]
@@ -181,6 +182,13 @@ async fn open_settings(app: AppHandle) -> Result<(), String> {
     app.vario_sensors().open_settings()
 }
 
+/// Installed offline map regions and the map style for them. Reads the regions folder
+/// again, so regions copied in meanwhile are found.
+#[tauri::command]
+async fn offline_maps(app: AppHandle) -> Result<maps::OfflineMaps, String> {
+    maps::reload(&app)
+}
+
 #[tauri::command]
 fn get_settings(state: State<'_, AppState>) -> SettingsDto {
     (*state.settings()).into()
@@ -295,6 +303,15 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_vario_sensors::init())
         .manage(AppState::default())
+        .manage(maps::Maps::default())
+        .register_asynchronous_uri_scheme_protocol(maps::SCHEME, |context, request, responder| {
+            // Tiles are read from disk; keep that off the main thread.
+            let app = context.app_handle().clone();
+            // `spawn_blocking` uses a thread pool instead of a new thread per tile.
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(maps::respond(&app, &request));
+            });
+        })
         .invoke_handler(tauri::generate_handler![
             start,
             stop,
@@ -312,6 +329,7 @@ pub fn run() {
             permissions,
             open_settings,
             interrupted_session,
+            offline_maps,
             dismiss_interrupted_session,
             smoke::smoke_report
         ])

@@ -44,7 +44,12 @@ function showPage(name) {
   for (const tab of document.querySelectorAll("#tabs button")) {
     tab.classList.toggle("active", tab.dataset.page === name);
   }
-  if (name === "map") FlightMap.show();
+  if (name === "map") {
+    FlightMap.show();
+    // Regions copied in meanwhile show up when the map is opened.
+    updateMapStyle();
+  }
+  if (name === "settings") updateMapStyle();
   if (name === "flights") loadFlights();
 }
 
@@ -466,11 +471,44 @@ FlightMap.configure({
 });
 $("follow").addEventListener("click", () => FlightMap.toggleFollow());
 
+// Offline regions win over the online style. The style text is compared so the map is
+// only reloaded when something changed.
+let onlineStyleUrl = null;
+let currentStyle = null;
+
+function showRegions(maps) {
+  const list = $("regions");
+  list.replaceChildren(
+    ...maps.regions.map((region) => {
+      const item = document.createElement("li");
+      item.textContent = `${region.name} (${Math.round(region.sizeBytes / 1e6)} MB)`;
+      return item;
+    }),
+  );
+  $("regions-none").hidden = maps.regions.length > 0;
+}
+
+async function updateMapStyle() {
+  let style = onlineStyleUrl;
+  try {
+    const maps = await invoke("offline_maps");
+    showRegions(maps);
+    if (maps.style) style = maps.style;
+  } catch (error) {
+    console.warn("offline_maps", error);
+  }
+  if (style === null || style === currentStyle) return;
+  currentStyle = style;
+  // The offline style comes as JSON text, the online one as a URL.
+  FlightMap.setStyle(style.startsWith("{") ? JSON.parse(style) : style);
+}
+
 $("save-map-style").addEventListener("click", async () => {
   try {
     const url = await invoke("set_map_style", { url: $("set-map-style").value });
     $("set-map-style").value = url;
-    FlightMap.setStyle(url);
+    onlineStyleUrl = url;
+    await updateMapStyle();
     $("settings-message").textContent = "";
   } catch (error) {
     $("settings-message").textContent = "Nicht übernommen: " + error;
@@ -507,9 +545,9 @@ async function init() {
   render(null);
   settings = await invoke("get_settings");
   showSettings();
-  const style = await invoke("get_map_style");
-  $("set-map-style").value = style;
-  FlightMap.setStyle(style);
+  onlineStyleUrl = await invoke("get_map_style");
+  $("set-map-style").value = onlineStyleUrl;
+  await updateMapStyle();
   checkPermissions();
   checkInterrupted();
   // Also catches the answers to the permission dialogs iOS shows on the first start.

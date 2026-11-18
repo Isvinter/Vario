@@ -67,7 +67,12 @@ pub fn maybe_run(app: &AppHandle) {
 #[tauri::command]
 pub fn smoke_report(app: AppHandle, text: String) {
     if enabled() {
-        println!("--- page content ---\n{text}\n--- end ---");
+        println!("--- page content ---\n{text}");
+        println!(
+            "offline map tiles served: {}",
+            crate::maps::TILES_SERVED.load(std::sync::atomic::Ordering::Relaxed)
+        );
+        println!("--- end ---");
         app.exit(0);
     }
 }

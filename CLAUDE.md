@@ -24,6 +24,8 @@ Phasen strikt nacheinander, nach jeder Phase auf Freigabe warten.
 | 3 | App auf Linux (Instrumente, Einstellungen, Karte) | freigegeben (geprüft auf macOS und im iOS-Simulator; auf Linux seit Phase 2b nicht mehr geprüft) |
 | 4 | Aufzeichnung, Flugliste | freigegeben (geprüft auf macOS und im iOS-Simulator; auf Linux nicht geprüft) |
 | 5 | iOS (Sensorbrücke, Hintergrund, Audio-Session) – auf dem Mac | in Arbeit (Sensorbrücke, Hintergrund, Audio-Session-Kategorie schon aus 2b; zuerst Audio-Unterbrechungen) |
+| 6 | Offline-Karten: Regionspakete der outdoor_app (`core-maps` per Git), Kachel-Schema `tiles://`, Topo-Stil | in Arbeit (Anzeige offline auf dem iPhone geprüft) |
+| 7 | Lufträume: Format einlesen (`flight-core`), Anzeige auf der Karte, später Warnungen; Datenquelle noch offen (openAIP oder OpenAir) | offen |
 
 Den Status hier nach jeder Freigabe aktualisieren.
 
@@ -52,7 +54,9 @@ apps/
     src-tauri/           Tauri app: glue only (commands, audio thread, desktop simulator)
     plugins/vario-sensors/  Tauri plugin; `ios/Sources` holds the Swift sensor bridge
     ui/                  web UI (plain HTML/JS, no bundler); `vendor/` holds MapLibre GL JS 5
-                         as unmodified files (version 6 needs ES modules and a worker file)
+                         as unmodified files (version 6 needs ES modules and a worker file);
+                         `map/fonts/` the map glyphs (Noto Sans, from the outdoor_app)
+    src-tauri/map-styles/  offline map style (copy of the outdoor_app's topo-summer.json)
 docs/ios-test.md         build and test instructions for the iOS test
 testdata/                real IGC files provided by the user
 ```
@@ -81,7 +85,12 @@ Technik (mit Phase 0 freigegeben):
 - Audio: `cpal` (ALSA/PipeWire auf Linux, CoreAudio auf iOS).
 - iOS-Sensoren: kleine Swift-Brücke (CoreLocation, CoreMotion), die Messwerte per C-FFI
   direkt an Rust gibt – nicht über JavaScript.
-- Kartenkacheln: Anbieter mit passender Nutzungsbedingung (Standard: OpenFreeMap),
+- Offline-Karten: Regionspakete (Ordner mit `manifest.json` und PMTiles) aus dem
+  Region-Builder der outdoor_app (github.com/Isvinter/outdoor_app, eigenes Projekt des
+  Nutzers), gelesen mit deren Crate `core-maps` (Git-Abhängigkeit, auf einen Commit
+  festgelegt). Regionen liegen im Ordner `maps` neben `flights`; auf dem iPhone per Finder
+  kopiert. Sind Regionen da, gewinnt die Offline-Karte.
+- Online-Kartenkacheln: Anbieter mit passender Nutzungsbedingung (Standard: OpenFreeMap),
   Kachel-URL konfigurierbar. Kein Massendownload, keine Nutzung von
   `tile.openstreetmap.org` als Bulk-Quelle. Attribution immer anzeigen.
 
@@ -132,6 +141,10 @@ cargo run -p vario-app
 # Track-Punkte und Skriptfehler aus und beendet sich
 VARIO_SMOKE_TEST=1 cargo run -p vario-app
 ```
+
+Offline-Kartenregionen liegen im Ordner `maps` (Desktop: Datenordner der App; zum Testen
+reicht dort ein Symlink auf eine Region der outdoor_app). Der Desktop-Simulator fliegt über
+dem Brauneck, also in deren Testregion.
 
 Flüge liegen als IGC-Dateien im Ordner `flights` (iOS: Dokumente-Ordner der App, in der
 App „Dateien“ sichtbar; Desktop: Datenordner der App), Sensorlogs daneben in `logs`. Jeder

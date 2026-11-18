@@ -144,7 +144,7 @@ const FlightMap = (() => {
       onMessage = options.onMessage;
     },
 
-    /** Sets the style URL; reloads the map if it already exists. */
+    /** Sets the style (URL or style object); reloads the map if it already exists. */
     setStyle(url) {
       styleUrl = url;
       usingFallback = false;

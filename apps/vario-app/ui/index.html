@@ -99,11 +99,21 @@
       </div>
 
       <h2>Karte</h2>
+      <h3>Offline-Karten</h3>
+      <ul id="regions"></ul>
+      <p id="regions-none" class="hint">
+        Keine Region installiert. Regionen (Ordner mit <code>manifest.json</code> aus der
+        outdoor_app) in den Ordner <b>maps</b> der Vario-App kopieren: am Mac im Finder
+        iPhone wählen → Dateien → Vario. Sind Regionen da, zeigt die Karte sie offline;
+        außerhalb davon bleibt sie leer.
+      </p>
+      <h3>Online-Karte</h3>
       <div class="setting">
         <label for="set-map-style">Kartenstil (URL)</label>
         <input id="set-map-style" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" />
         <small>
-          Adresse eines MapLibre-Stils. Standard: OpenFreeMap. Leer lassen für den Standard.
+          Adresse eines MapLibre-Stils, verwendet ohne installierte Region. Standard:
+          OpenFreeMap. Leer lassen für den Standard.
         </small>
       </div>
       <div class="row">

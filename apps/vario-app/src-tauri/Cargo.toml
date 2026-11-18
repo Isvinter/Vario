@@ -19,6 +19,9 @@ sensor-bridge.workspace = true
 vario-audio.workspace = true
 vario-engine.workspace = true
 tauri-plugin-vario-sensors = { path = "../plugins/vario-sensors" }
+# Offline map regions (PMTiles packages) from the outdoor_app project of the same author;
+# pinned to a commit so builds stay reproducible.
+core-maps = { git = "https://github.com/Isvinter/outdoor_app.git", rev = "75592d00ef29d2465bf47692ae3defb2cee70b78" }
 serde.workspace = true
 serde_json = "1"
 tauri = { version = "2", features = [] }
