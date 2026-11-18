@@ -2,16 +2,26 @@
 //!
 //! Run with `VARIO_SMOKE_TEST=1 cargo run -p vario-app`: the app presses its own Start
 //! button, lets the simulated flight run for a while, opens the map, the flight list and
-//! the recorded flight, prints what the pages show (plus the number of track points and any script errors) and exits. Because it goes through the real button and the real page, it also catches
+//! the recorded flight, prints what the pages show (plus the number of track points and
+//! any script errors) and exits. Because it goes through the real button and the real page, it also catches
 //! errors in the JavaScript and in the connection between page and Rust.
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Listener, Manager};
 
 const ENV_VAR: &str = "VARIO_SMOKE_TEST";
 /// Long enough for one 10-second summary line to appear.
 const RUN_TIME: Duration = Duration::from_secs(14);
+/// Address of a desktop share (e.g. the outdoor_app's `share-serve`): if set, the
+/// smoke test also connects to it and downloads the first region it offers. That
+/// writes into the app's real `maps` folder, so run it with `HOME` set to an empty
+/// temporary folder.
+const SHARE_ENV_VAR: &str = "VARIO_SMOKE_SHARE";
+/// How long the region download may take.
+const DOWNLOAD_TIME: Duration = Duration::from_secs(120);
 
 pub fn enabled() -> bool {
     std::env::var_os(ENV_VAR).is_some()
@@ -48,6 +58,9 @@ pub fn maybe_run(app: &AppHandle) {
         std::thread::sleep(Duration::from_secs(1));
         let _ = window.eval("document.querySelector('.flight .button')?.click()");
         std::thread::sleep(Duration::from_secs(1));
+        if let Some(address) = share_address() {
+            download_from_share(&window, &address);
+        }
         let _ = window.eval(
             "window.__TAURI__.core.invoke('smoke_report', { text: \
              [...document.querySelectorAll('.page')].map((page) => page.innerText).join('\\n') + \
@@ -61,6 +74,48 @@ pub fn maybe_run(app: &AppHandle) {
         eprintln!("smoke test: the page did not report back");
         app.exit(1);
     });
+}
+
+fn share_address() -> Option<String> {
+    std::env::var(SHARE_ENV_VAR)
+        .ok()
+        .filter(|address| !address.is_empty())
+}
+
+/// Goes through the settings like a person: enters the address, connects, presses the
+/// first "Laden" or "Aktualisieren" button and waits until the page says how it ended.
+fn download_from_share(window: &tauri::WebviewWindow, address: &str) {
+    // The download reports its end as an event; listen to it here in Rust.
+    let ended = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&ended);
+    window.listen_any(crate::share::DOWNLOAD_EVENT, move |event| {
+        if !event.payload().contains("\"state\":\"running\"") {
+            println!("region download: {}", event.payload());
+            flag.store(true, Ordering::SeqCst);
+        }
+    });
+    let _ = window.eval("document.querySelector('[data-page=settings]').click()");
+    std::thread::sleep(Duration::from_secs(1));
+    let address = serde_json::to_string(address).unwrap_or_default();
+    let _ = window.eval(format!(
+        "document.getElementById('set-map-source').value = {address}; \
+         document.getElementById('connect-map-source').click();"
+    ));
+    std::thread::sleep(Duration::from_secs(3));
+    let _ = window.eval(
+        "[...document.querySelectorAll('#regions .button')] \
+         .find((b) => b.textContent === 'Laden' || b.textContent === 'Aktualisieren')?.click()",
+    );
+    // Wait for the end of the download, then give the page a moment to show it.
+    let started = std::time::Instant::now();
+    while started.elapsed() < DOWNLOAD_TIME {
+        std::thread::sleep(Duration::from_millis(500));
+        if ended.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_secs(2));
+            return;
+        }
+    }
+    eprintln!("smoke test: the region download did not end in time");
 }
 
 /// Called by the page at the end of the smoke test with its visible text.

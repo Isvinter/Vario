@@ -141,6 +141,12 @@ cargo run -p vario-app
 # Selbsttest: drückt selbst auf Start, öffnet die Karte, gibt Seiteninhalt, Anzahl der
 # Track-Punkte und Skriptfehler aus und beendet sich
 VARIO_SMOKE_TEST=1 cargo run -p vario-app
+# Region per WLAN laden: Freigabe der outdoor_app nachstellen (deren share-serve, aus
+# einem Checkout der outdoor_app; --seed-region verschiebt den Ordner, also eine Kopie
+# angeben) und den Selbsttest mit leerem HOME dagegen laufen lassen, damit der echte
+# maps-Ordner unberührt bleibt
+cargo run --release -p core-share --bin share-serve -- --data /tmp/share --port 8765 --seed-region /tmp/kopie-der-region
+cargo build -p vario-app && HOME=$(mktemp -d) VARIO_SMOKE_TEST=1 VARIO_SMOKE_SHARE=127.0.0.1:8765 target/debug/vario-app
 ```
 
 Offline-Kartenregionen liegen im Ordner `maps` (Desktop: Datenordner der App; zum Testen

@@ -49,7 +49,10 @@ function showPage(name) {
     // Regions copied in meanwhile show up when the map is opened.
     updateMapStyle();
   }
-  if (name === "settings") updateMapStyle();
+  if (name === "settings") {
+    updateMapStyle();
+    refreshRegions();
+  }
   if (name === "flights") loadFlights();
 }
 
@@ -493,24 +496,11 @@ for (const button of document.querySelectorAll("#offline-style button")) {
   });
 }
 
-function showRegions(maps) {
-  showOfflineStyle(maps.variant);
-  const list = $("regions");
-  list.replaceChildren(
-    ...maps.regions.map((region) => {
-      const item = document.createElement("li");
-      item.textContent = `${region.name} (${Math.round(region.sizeBytes / 1e6)} MB)`;
-      return item;
-    }),
-  );
-  $("regions-none").hidden = maps.regions.length > 0;
-}
-
 async function updateMapStyle() {
   let style = onlineStyleUrl;
   try {
     const maps = await invoke("offline_maps");
-    showRegions(maps);
+    showOfflineStyle(maps.variant);
     if (maps.style) style = maps.style;
   } catch (error) {
     console.warn("offline_maps", error);
@@ -530,6 +520,216 @@ $("save-map-style").addEventListener("click", async () => {
     $("settings-message").textContent = "";
   } catch (error) {
     $("settings-message").textContent = "Nicht übernommen: " + error;
+  }
+});
+
+// ---- Regions: installed and on offer from the desktop (outdoor_app) ----
+//
+// The list comes from Rust in two steps: at once with only the installed regions, then
+// with the desktop's catalog, which can take up to 20 s if the desktop is not reachable.
+// Downloads run in Rust; their progress comes as the event "region-download".
+
+let regionList = { source: "", catalogError: null, regions: [] };
+let regionRequest = 0; // answers to older requests are dropped
+let catalogShown = false; // the list already holds what the desktop offers
+const downloadProgress = new Map(); // region id -> { done, total }
+const progressViews = new Map(); // region id -> { bar, text } of the shown list
+
+const megabytes = (bytes) => `${Math.round(bytes / 1e6)} MB`;
+
+// Versions are build times like "202611181120".
+function versionDate(version) {
+  const m = /^(\d{4})(\d{2})(\d{2})/.exec(version ?? "");
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : version;
+}
+
+// `withCatalog: false` reads only the installed regions and never the network.
+async function refreshRegions(withCatalog = true) {
+  const request = ++regionRequest;
+  // Without the catalog only the first time: later the list would shrink for a moment.
+  for (const catalog of catalogShown ? [true] : [false, true]) {
+    if (catalog && (!withCatalog || !regionList.source)) break;
+    if (catalog) $("regions-message").textContent = "Suche den Desktop …";
+    try {
+      const list = await invoke("map_regions", { catalog });
+      if (request !== regionRequest) return;
+      regionList = list;
+      if (catalog) catalogShown = !list.catalogError;
+      showRegionList();
+    } catch (error) {
+      if (request !== regionRequest) return;
+      $("regions-message").textContent = "Fehler: " + error;
+      return;
+    }
+  }
+}
+
+function showRegionList() {
+  const { regions, source, catalogError } = regionList;
+  progressViews.clear();
+  $("regions").replaceChildren(...regions.map(regionElement));
+  $("regions-none").hidden = regions.length > 0;
+  let message = "";
+  if (catalogError) {
+    message = "Desktop nicht erreichbar. Läuft die Freigabe in der outdoor_app? (" + catalogError + ")";
+  } else if (source && !regions.some((region) => region.state !== "installed")) {
+    message = "Verbunden. Der Desktop bietet keine neueren Regionen an.";
+  }
+  $("regions-message").textContent = message;
+}
+
+const STATE_TEXT = {
+  available: "auf dem Desktop",
+  installed: "installiert",
+  updateAvailable: "Update auf dem Desktop",
+  downloading: "wird geladen",
+};
+
+// Built with DOM calls instead of innerHTML: names come from the network.
+function regionElement(region) {
+  const element = document.createElement("div");
+  element.className = "flight region";
+
+  const title = document.createElement("div");
+  title.className = "flight-title";
+  title.textContent = region.name;
+
+  const facts = document.createElement("div");
+  facts.className = "flight-facts";
+  const parts = [megabytes(region.sizeBytes), STATE_TEXT[region.state]];
+  if (region.installedVersion) parts.push("Stand " + versionDate(region.installedVersion));
+  if (region.state === "updateAvailable") parts.push("neu: " + versionDate(region.version));
+  facts.textContent = parts.join(" · ");
+  element.append(title, facts);
+
+  if (region.state === "downloading") {
+    const bar = document.createElement("progress");
+    bar.max = 1;
+    const text = document.createElement("div");
+    text.className = "flight-facts";
+    progressViews.set(region.id, { bar, text });
+    element.append(bar, text);
+    showProgress(region.id);
+  }
+
+  const buttons = document.createElement("div");
+  buttons.className = "row";
+  if (region.state === "downloading") {
+    buttons.append(regionButton("Abbrechen", () => invoke("cancel_region_download", { id: region.id })));
+  } else {
+    if (region.state === "available" || region.state === "updateAvailable") {
+      const label = region.state === "available" ? "Laden" : "Aktualisieren";
+      buttons.append(regionButton(label, () => startDownload(region)));
+    }
+    if (region.installedVersion) buttons.append(deleteButton(region));
+  }
+  element.append(buttons);
+  return element;
+}
+
+function regionButton(label, action) {
+  const button = document.createElement("button");
+  button.className = "button";
+  button.textContent = label;
+  button.addEventListener("click", async () => {
+    try {
+      await action();
+    } catch (error) {
+      $("regions-message").textContent = "Fehler: " + error;
+    }
+  });
+  return button;
+}
+
+// Deleting cannot be undone, so it takes two taps (as for flights).
+function deleteButton(region) {
+  const button = document.createElement("button");
+  button.className = "button";
+  button.textContent = "Löschen";
+  let armed = false;
+  button.addEventListener("click", async () => {
+    if (!armed) {
+      armed = true;
+      button.textContent = "Wirklich löschen?";
+      button.classList.add("on");
+      setTimeout(() => {
+        armed = false;
+        button.textContent = "Löschen";
+        button.classList.remove("on");
+      }, 3000);
+      return;
+    }
+    try {
+      await invoke("delete_region", { id: region.id });
+    } catch (error) {
+      $("regions-message").textContent = "Löschen fehlgeschlagen: " + error;
+    }
+    await updateMapStyle();
+    refreshRegions();
+  });
+  return button;
+}
+
+async function startDownload(region) {
+  await invoke("download_region", { id: region.id });
+  downloadProgress.set(region.id, { done: 0, total: region.sizeBytes });
+  region.state = "downloading";
+  showRegionList();
+}
+
+function showProgress(id) {
+  const view = progressViews.get(id);
+  const progress = downloadProgress.get(id);
+  if (!view || !progress) return;
+  const share = progress.total > 0 ? progress.done / progress.total : 0;
+  view.bar.value = share;
+  view.text.textContent =
+    `${Math.floor(share * 100)} % · ${megabytes(progress.done)} von ${megabytes(progress.total)}`;
+}
+
+const DOWNLOAD_ERRORS = {
+  region_download: "Verbindung zum Desktop unterbrochen. Nochmal laden setzt den Download fort.",
+  region_checksum: "Eine Datei kam beschädigt an und wurde verworfen. Bitte nochmal laden.",
+  region_io: "Konnte nicht gespeichert werden (Speicher voll?).",
+};
+
+window.__TAURI__.event.listen("region-download", async ({ payload }) => {
+  const { region, done, total, state } = payload;
+  if (state === "running") {
+    downloadProgress.set(region, { done, total });
+    if (progressViews.has(region)) {
+      showProgress(region);
+    } else {
+      refreshRegions();
+    }
+    return;
+  }
+  downloadProgress.delete(region);
+  const name = regionList.regions.find((r) => r.id === region)?.name ?? region;
+  if (state === "done") {
+    // The new region shows on the map at once.
+    await updateMapStyle();
+  }
+  await refreshRegions();
+  if (state === "done") {
+    $("regions-message").textContent = `${name} ist geladen.`;
+  } else if (state === "cancelled") {
+    $("regions-message").textContent = `Laden von ${name} abgebrochen; es geht beim nächsten Laden weiter.`;
+  } else {
+    $("regions-message").textContent =
+      `${name}: ${DOWNLOAD_ERRORS[payload.errorCode] ?? payload.error}`;
+  }
+});
+
+$("connect-map-source").addEventListener("click", async () => {
+  try {
+    const source = await invoke("set_map_source", { source: $("set-map-source").value });
+    $("set-map-source").value = source;
+    regionList.source = source;
+    catalogShown = false;
+    refreshRegions();
+  } catch (error) {
+    $("regions-message").textContent = "Nicht übernommen: " + error;
   }
 });
 
@@ -565,7 +765,11 @@ async function init() {
   showSettings();
   onlineStyleUrl = await invoke("get_map_style");
   $("set-map-style").value = onlineStyleUrl;
+  $("set-map-source").value = await invoke("get_map_source");
+  // The desktop is asked only when the settings are opened: on iOS the first
+  // connection asks for the local network permission.
   await updateMapStyle();
+  refreshRegions(false);
   checkPermissions();
   checkInterrupted();
   // Also catches the answers to the permission dialogs iOS shows on the first start.

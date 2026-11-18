@@ -260,16 +260,21 @@ fn maps_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     crate::maps::dir(app).ok_or_else(|| "no maps folder".to_owned())
 }
 
-/// The region list. Blocking: reads the catalog over the network.
-pub fn regions(app: &AppHandle) -> Result<RegionList, String> {
+/// The region list. With `catalog`, the desktop's catalog is read too, which blocks
+/// (up to the connect timeout of 20 s if the desktop is not reachable); without it the
+/// list holds only the installed regions and comes at once.
+pub fn regions(app: &AppHandle, catalog: bool) -> Result<RegionList, String> {
     let store = RegionStore::open(&maps_dir(app)?).map_err(|error| error.to_string())?;
     let downloading = app.state::<Downloads>().ids();
-    Ok(list(
+    let source = load_source(app);
+    let mut list = list(
         &store,
-        &load_source(app),
+        if catalog { &source } else { "" },
         &DefaultFetcher::new(),
         &downloading,
-    ))
+    );
+    list.source = source;
+    Ok(list)
 }
 
 /// Starts downloading region `id` on its own thread and returns at once. Progress and

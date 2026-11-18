@@ -108,13 +108,28 @@
         Flugkarte: kräftiges Gelände, Gipfel mit Höhe, Seilbahnen rot, Stromleitungen gestrichelt, Start- und Landeplätze, Hindernisse.
         Topo: ausführlich mit Wegen, Hütten und Pisten.
       </small>
-      <ul id="regions"></ul>
+      <h3>Regionen</h3>
+      <div id="regions"></div>
       <p id="regions-none" class="hint">
-        Keine Region installiert. Regionen (Ordner mit <code>manifest.json</code> aus der
-        outdoor_app) in den Ordner <b>maps</b> der Vario-App kopieren: am Mac im Finder
-        iPhone wählen → Dateien → Vario. Sind Regionen da, zeigt die Karte sie offline;
-        außerhalb davon bleibt sie leer.
+        Keine Region installiert. Regionen vom Desktop laden (unten) oder als Ordner mit
+        <code>manifest.json</code> aus der outdoor_app in den Ordner <b>maps</b> der
+        Vario-App kopieren: am Mac im Finder iPhone wählen → Dateien → Vario. Sind Regionen
+        da, zeigt die Karte sie offline; außerhalb davon bleibt sie leer.
       </p>
+      <p id="regions-message" class="hint"></p>
+      <div class="setting">
+        <label for="set-map-source">Desktop im WLAN (outdoor_app)</label>
+        <input id="set-map-source" type="text" inputmode="url" placeholder="192.168.1.20:8765"
+          autocapitalize="off" autocorrect="off" spellcheck="false" />
+        <small>
+          In der outdoor_app am Desktop die Freigabe einschalten und die dort angezeigte
+          Adresse eintragen. iPhone und Desktop müssen im selben WLAN sein. App beim Laden
+          offen lassen; ein unterbrochener Download geht beim nächsten Laden weiter.
+        </small>
+      </div>
+      <div class="row">
+        <button id="connect-map-source" class="button">Verbinden</button>
+      </div>
       <h3>Online-Karte</h3>
       <div class="setting">
         <label for="set-map-style">Kartenstil (URL)</label>

@@ -208,11 +208,11 @@ fn set_map_source(app: AppHandle, source: String) -> Result<String, String> {
     share::save_source(&app, &source)
 }
 
-/// Regions on this device and on offer from the desktop. `async`: reading the
-/// desktop's catalog can take a while.
+/// Regions on this device and, with `catalog`, on offer from the desktop. `async`:
+/// reading the desktop's catalog can take a while.
 #[tauri::command]
-async fn map_regions(app: AppHandle) -> Result<share::RegionList, String> {
-    share::regions(&app)
+async fn map_regions(app: AppHandle, catalog: bool) -> Result<share::RegionList, String> {
+    share::regions(&app, catalog)
 }
 
 /// Starts downloading a region from the desktop; progress comes as events.
